@@ -1,4 +1,4 @@
-# Livinova (Monorepo)
+# Livinova
 
 Platform marketplace properti “Livinova” untuk listing properti Smart Living terverifikasi, portal developer, dan panel admin.
 
