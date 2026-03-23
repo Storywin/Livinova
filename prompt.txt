@@ -1,0 +1,517 @@
+Livinova
+Brand: Livinova
+Website: livinova.id
+Makna: Living + Nova (baru, inovatif)
+Kesan: modern, elegan, cocok untuk skala nasional.
+
+
+
+You are a senior full-stack software architect and product engineer.
+
+Build a production-ready web platform for a property marketplace brand named "Livinova".
+
+PROJECT NAME
+Livinova
+
+BRAND POSITIONING
+Livinova is a trusted property marketplace focused on developer-listed properties that are already integrated with Smart Living / Smart Home features and manually verified by our internal team.
+Other property developers can also apply to:
+1. list their properties,
+2. request smart living / smart home integration for their projects,
+3. advertise their projects on the platform.
+
+The platform must look modern, premium, trustworthy, scalable, and SEO-friendly.
+
+PRIMARY GOALS
+1. Build a public-facing property listing website.
+2. Build a developer portal for property developers to submit listings and request smart home integration.
+3. Build an internal admin panel for manual verification, approvals, and operational management.
+4. Build mortgage simulation tools for Indonesian banks.
+5. Build a promotional/advertising system for featured projects and sponsored listings.
+6. Build the system with clean architecture and production-ready code.
+
+TECH STACK (MANDATORY)
+Frontend:
+- Next.js latest stable
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- TanStack Query
+- React Hook Form
+- Zod
+- Zustand for lightweight client state if needed
+
+Backend:
+- NestJS
+- TypeScript
+- Prisma ORM
+- PostgreSQL
+- Redis for caching / queues
+- BullMQ for background jobs if needed
+- JWT + refresh token authentication
+- Role-based access control
+
+Storage / Infra:
+- S3-compatible storage for images, brochures, and project assets
+- Dockerized local development
+- Environment variable based config
+- Swagger/OpenAPI for backend API docs
+
+ARCHITECTURE REQUIREMENTS
+Use a monorepo structure:
+- apps/web -> Next.js frontend
+- apps/api -> NestJS backend
+- packages/ui -> shared UI components if useful
+- packages/types -> shared types
+- packages/config -> shared tsconfig/eslint/prettier config
+
+Use clean, modular, scalable architecture.
+Follow best practices for:
+- reusable components
+- API abstraction
+- DTO validation
+- secure auth
+- SEO
+- accessibility
+- error handling
+- logging
+- audit trail
+- database migrations
+- image optimization
+
+TARGET USERS
+1. Public users / home buyers / investors
+2. Property developers
+3. Internal Livinova admin / verifier team
+4. Super admin
+
+CORE BUSINESS RULES
+1. Only verified smart living / smart home properties can be published as fully active verified listings.
+2. Developers can submit properties before verification, but they remain in pending review until approved by admin.
+3. Every property and developer goes through manual verification by internal team.
+4. Developers can request smart home integration services even if their property is not fully integrated yet.
+5. Admin must be able to approve, reject, request revision, or mark as draft.
+6. Mortgage simulation must support:
+   - BCA
+   - BRI
+   - BNI
+   - BSI Syariah
+   - BTN
+   - Mandiri
+7. Bank mortgage settings must be manageable from admin panel.
+8. The platform must support advertising packages:
+   - basic listing
+   - verified listing
+   - featured listing
+   - sponsored project
+   - banner advertising
+9. SEO is critical for public property listing pages.
+
+PUBLIC WEBSITE PAGES
+Create these pages:
+1. Home
+2. Property listing page
+3. Property detail page
+4. Smart Living page
+5. Developer directory page
+6. Developer detail page
+7. Mortgage simulator page
+8. Compare properties page
+9. Promo / featured projects page
+10. Articles / blog page
+11. Article detail page
+12. About us
+13. Contact us
+14. Developer registration page
+15. Submit property page
+16. Request smart home integration page
+17. Login / register
+18. User dashboard (basic lead/inquiry tracking if needed)
+
+HOME PAGE SECTIONS
+Build a premium home page with:
+- hero section with search bar
+- headline for verified smart living properties
+- advanced property search
+- featured projects carousel/grid
+- verified developers section
+- smart living value proposition section
+- mortgage simulation quick calculator
+- latest articles
+- call-to-action for developers to submit project
+- footer with full site links
+
+PROPERTY LISTING PAGE
+Must support:
+- search by keyword
+- filter by city / area
+- filter by price range
+- filter by developer
+- filter by property type
+- filter by number of bedrooms
+- filter by smart features
+- filter by verification status
+- filter by project status (ready stock / pre-launch / under development)
+- sorting by newest / price low-high / price high-low / featured
+- pagination or infinite scroll
+- SEO-friendly URL structure
+
+PROPERTY DETAIL PAGE
+Must include:
+- project name
+- property title
+- developer name
+- complete location
+- price and starting price
+- image gallery
+- brochure download
+- floor plan
+- specs
+- smart home features
+- verification badge and verification details
+- project status
+- available units / types
+- location map placeholder
+- estimated installment / mortgage preview
+- inquiry form
+- WhatsApp CTA placeholder
+- schedule visit form
+- compare button
+- favorite button
+- related properties
+
+SMART LIVING PAGE
+Explain:
+- what smart living means
+- benefits for buyers
+- benefits for developers
+- smart home feature categories
+- integration process
+- Livinova verification standard
+- available integration packages
+
+DEVELOPER PORTAL FEATURES
+Developer users must be able to:
+- register company account
+- complete company profile
+- upload company legal/supporting documents
+- submit projects
+- submit property listings
+- upload media
+- request smart home integration
+- purchase or request advertising packages
+- track verification status
+- view inquiries/leads
+- manage active listings
+- edit draft listings
+- see rejection notes and revision requests
+
+ADMIN PANEL FEATURES
+Admin must be able to:
+- manage users
+- manage roles
+- manage developers
+- manage projects
+- manage listings
+- review developer submissions
+- verify developer data
+- verify smart home readiness
+- add verification notes
+- approve / reject / request revision
+- manage mortgage banks and mortgage settings
+- manage articles/blog
+- manage homepage featured sections
+- manage banner ads
+- manage inquiries and leads
+- manage audit logs
+- manage media assets
+- manage smart home integration requests
+- manage ad packages and campaign placements
+
+MORTGAGE SIMULATION FEATURES
+Build a mortgage simulator for Indonesian property financing.
+Support:
+- BCA
+- BRI
+- BNI
+- BSI Syariah
+- BTN
+- Mandiri
+
+Inputs:
+- property price
+- down payment
+- tenor
+- interest rate or margin
+- monthly income
+- optional fees
+
+Outputs:
+- monthly installment estimate
+- total down payment
+- total financing
+- total payment estimate
+- comparison between banks
+- affordability estimate
+- special sharia mode for BSI with fixed installment style logic
+
+Admin must be able to configure:
+- default rates
+- promotional rates
+- fixed period assumptions
+- floating assumptions
+- sharia margin assumptions
+- admin fees
+- insurance estimates
+- provisi and notary estimates
+
+CONTENT / BLOG FEATURES
+Build article/blog module for SEO:
+- article categories
+- featured articles
+- article detail page
+- slug support
+- meta title / meta description
+- author
+- publish status
+- tags
+
+USER ROLES
+Create role system:
+- public
+- buyer
+- developer
+- admin
+- verifier
+- super_admin
+
+DATABASE DESIGN
+Design a robust PostgreSQL schema using Prisma.
+At minimum include:
+- users
+- roles
+- sessions or refresh token table
+- developers
+- developer_documents
+- projects
+- project_locations
+- property_units
+- property_listings
+- property_images
+- smart_features
+- property_smart_features
+- verification_records
+- verification_checklists
+- mortgage_banks
+- mortgage_products
+- mortgage_simulations
+- leads
+- inquiries
+- viewing_requests
+- ad_packages
+- ad_campaigns
+- articles
+- article_categories
+- media_assets
+- audit_logs
+- favorites
+- compare_lists or compare_items
+
+Use proper relationships, indexes, enums, timestamps, slugs, and status fields.
+
+IMPORTANT ENTITY RULES
+Developer:
+- can have many projects
+- has verification status
+- has documents
+- has contact person details
+
+Project:
+- belongs to one developer
+- can have multiple property units/listings
+- can have verification status
+- can have smart living readiness level
+
+Property listing:
+- belongs to a project
+- can be draft / pending / approved / rejected / published / archived
+- has SEO slug
+- has feature flags like featured / sponsored / recommended
+- has pricing and specs
+- has verification badge visibility
+
+Verification:
+- track who reviewed, when reviewed, notes, outcome
+- checklist items should be stored and manageable
+
+UI / UX DIRECTION
+Design language:
+- premium
+- modern
+- clean
+- professional
+- technology-oriented
+- property marketplace aesthetic
+Color direction:
+- elegant blue / navy / white / light neutral
+Brand:
+- Livinova
+Tone:
+- trustworthy
+- modern
+- innovative
+- premium
+
+FRONTEND REQUIREMENTS
+Use:
+- server components where appropriate
+- SEO metadata
+- reusable layout system
+- responsive design
+- loading states
+- empty states
+- form validation
+- toast notifications
+- dashboard sidebar layouts
+- proper table and filtering UX for admin/developer panels
+
+BACKEND REQUIREMENTS
+Use:
+- modular NestJS structure
+- auth module
+- users module
+- developers module
+- projects module
+- listings module
+- verification module
+- mortgage module
+- ads module
+- articles module
+- inquiries module
+- media module
+- admin module
+- audit module
+
+Implement:
+- DTO validation
+- pagination
+- filtering
+- sorting
+- file upload endpoints
+- role guards
+- audit logs for admin actions
+- clean service/repository separation if needed
+
+SECURITY REQUIREMENTS
+Implement:
+- password hashing
+- JWT access token + refresh token
+- role-based authorization
+- rate limiting for public forms if reasonable
+- secure file upload validation
+- input validation everywhere
+- server-side validation
+- admin-only protected routes
+- developer-only protected routes
+
+SEO REQUIREMENTS
+Critical for public pages:
+- SEO-friendly slugs
+- metadata generation
+- sitemap
+- robots.txt
+- structured data for listing pages where appropriate
+- fast page performance
+- clean semantic HTML
+
+DELIVERABLE STYLE
+Work iteratively, but produce complete code.
+Do not only describe.
+Generate the actual implementation.
+
+PHASED IMPLEMENTATION ORDER
+Phase 1:
+- monorepo setup
+- base configs
+- Next.js app setup
+- NestJS app setup
+- Prisma schema
+- docker-compose for postgres and redis
+- env examples
+- auth system
+- role system
+
+Phase 2:
+- public website pages
+- property listing module
+- property detail page
+- developer directory
+- home page
+- smart living page
+
+Phase 3:
+- developer dashboard
+- submit property flow
+- smart home integration request flow
+- media uploads
+- developer profile management
+
+Phase 4:
+- admin panel
+- verification workflow
+- mortgage simulator module
+- bank settings management
+- article CMS
+- ad packages and featured projects
+
+Phase 5:
+- polishing
+- SEO improvements
+- sample seed data
+- README
+- API docs
+- run instructions
+
+OUTPUT FORMAT
+For each phase:
+1. Explain briefly what you are building.
+2. Generate the code files.
+3. Show folder structure.
+4. Include setup instructions.
+5. Include migration / seed instructions.
+6. Continue until a usable MVP is completed.
+
+CODE QUALITY RULES
+- Use strict TypeScript
+- No pseudo-code unless absolutely necessary
+- No unnecessary placeholders if real implementation can be provided
+- Use clean naming
+- Use production-minded patterns
+- Add comments only where useful
+- Avoid overengineering
+- Keep the code maintainable and extensible
+
+SEED DATA
+Create realistic sample data for:
+- developers
+- projects
+- listings
+- smart features
+- mortgage banks
+- mortgage sample settings
+- articles
+
+COPYWRITING
+Use the brand name Livinova consistently.
+Examples of messages and headings should fit a premium smart property marketplace.
+
+START NOW
+Begin by generating:
+1. monorepo folder structure,
+2. package setup,
+3. docker-compose,
+4. env templates,
+5. Prisma schema,
+6. NestJS module plan,
+7. Next.js route plan,
+8. then start implementing Phase 1.

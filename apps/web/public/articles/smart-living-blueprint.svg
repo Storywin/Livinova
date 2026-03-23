@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="0.55" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+    <radialGradient id="r" cx="60%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="p" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.5" fill="#0f172a" fill-opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="900" fill="url(#g)"/>
+  <rect width="1600" height="900" fill="url(#r)"/>
+  <rect width="1600" height="900" fill="url(#p)" opacity="0.35"/>
+  <g opacity="0.9">
+    <rect x="140" y="140" width="1320" height="620" rx="40" fill="#ffffff" fill-opacity="0.14"/>
+    <rect x="200" y="210" width="520" height="360" rx="28" fill="#0b1220" fill-opacity="0.16"/>
+    <rect x="760" y="210" width="640" height="120" rx="28" fill="#0b1220" fill-opacity="0.16"/>
+    <rect x="760" y="360" width="640" height="200" rx="28" fill="#0b1220" fill-opacity="0.16"/>
+    <rect x="760" y="590" width="640" height="110" rx="28" fill="#0b1220" fill-opacity="0.16"/>
+  </g>
+  <g fill="#ffffff" opacity="0.95">
+    <text x="210" y="275" font-family="ui-sans-serif, system-ui, -apple-system" font-size="46" font-weight="700">Smart Living Blueprint</text>
+    <text x="210" y="330" font-family="ui-sans-serif, system-ui, -apple-system" font-size="26" opacity="0.9">Checklist desain, instalasi, dan integrasi Smart Home.</text>
+  </g>
+</svg>

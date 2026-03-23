@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Nusantara Properti">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="url(#g)"/>
+  <path d="M78 170V94l50-28 50 28v76l-50 28-50-28Z" fill="rgba(255,255,255,0.18)"/>
+  <path d="M98 160v-52l30-17 30 17v52l-30 17-30-17Z" fill="rgba(255,255,255,0.26)"/>
+  <path d="M128 92v96" stroke="rgba(255,255,255,0.35)" stroke-width="6" stroke-linecap="round"/>
+</svg>

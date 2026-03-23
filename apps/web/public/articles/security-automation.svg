@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="0.5" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+    <radialGradient id="r3" cx="55%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="p3" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="1.5" fill="#ffffff" fill-opacity="0.14"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="900" fill="url(#g3)"/>
+  <rect width="1600" height="900" fill="url(#r3)"/>
+  <rect width="1600" height="900" fill="url(#p3)" opacity="0.5"/>
+  <g opacity="0.9">
+    <rect x="140" y="160" width="1320" height="580" rx="44" fill="#ffffff" fill-opacity="0.12"/>
+    <rect x="210" y="240" width="520" height="420" rx="30" fill="#0b1220" fill-opacity="0.18"/>
+    <rect x="770" y="240" width="620" height="150" rx="30" fill="#0b1220" fill-opacity="0.18"/>
+    <rect x="770" y="420" width="620" height="240" rx="30" fill="#0b1220" fill-opacity="0.18"/>
+  </g>
+  <g fill="#ffffff" opacity="0.96">
+    <text x="220" y="310" font-family="ui-sans-serif, system-ui, -apple-system" font-size="46" font-weight="700">Security & Automation</text>
+    <text x="220" y="365" font-family="ui-sans-serif, system-ui, -apple-system" font-size="26" opacity="0.9">Standar keamanan smart lock, CCTV, dan akses tamu.</text>
+  </g>
+</svg>

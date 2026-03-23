@@ -1,0 +1,682 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleName {
+  public
+  buyer
+  developer
+  admin
+  verifier
+  super_admin
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum VerificationStatus {
+  draft
+  pending
+  approved
+  rejected
+  revision_requested
+}
+
+enum ProjectStatus {
+  ready_stock
+  pre_launch
+  under_development
+  archived
+}
+
+enum SmartReadinessLevel {
+  none
+  planned
+  partial
+  integrated
+}
+
+enum ListingStatus {
+  draft
+  pending
+  approved
+  rejected
+  published
+  archived
+}
+
+enum PropertyType {
+  rumah
+  apartemen
+  ruko
+  villa
+  tanah
+}
+
+enum SmartFeatureCategory {
+  keamanan
+  kenyamanan
+  efisiensi_energi
+  hiburan
+  otomasi
+}
+
+enum VerificationEntityType {
+  developer
+  project
+  listing
+}
+
+enum VerificationOutcome {
+  approved
+  rejected
+  revision_requested
+}
+
+enum DeveloperDocumentType {
+  akta_perusahaan
+  nib
+  npwp
+  siup
+  lainnya
+}
+
+enum DocumentStatus {
+  uploaded
+  pending_review
+  approved
+  rejected
+}
+
+enum LeadSource {
+  web
+  whatsapp
+  admin
+}
+
+enum ViewingRequestStatus {
+  pending
+  scheduled
+  completed
+  cancelled
+}
+
+enum AdPackageType {
+  basic_listing
+  verified_listing
+  featured_listing
+  sponsored_project
+  banner_advertising
+}
+
+enum AdCampaignStatus {
+  draft
+  active
+  paused
+  ended
+}
+
+enum ArticleStatus {
+  draft
+  published
+  archived
+}
+
+enum MediaKind {
+  image
+  brochure
+  document
+  banner
+}
+
+enum StorageProvider {
+  s3_compat
+}
+
+model Role {
+  id        String     @id @default(uuid())
+  name      RoleName   @unique
+  users     UserRole[]
+  createdAt DateTime   @default(now())
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String?
+  phone        String?
+  status       UserStatus     @default(active)
+  roles        UserRole[]
+  refresh      RefreshToken[]
+  developerIds DeveloperUser[]
+  verificationReviews VerificationRecord[] @relation("VerificationReviewer")
+  mortgageSimulations MortgageSimulation[]
+  leads        Lead[]
+  inquiries    Inquiry[]
+  viewingRequests ViewingRequest[]
+  favorites    Favorite[]
+  compareLists CompareList[]
+  auditLogs    AuditLog[]     @relation("AuditActor")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([createdAt])
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Developer {
+  id                 String              @id @default(uuid())
+  name               String
+  slug               String              @unique
+  profileTemplate    String              @default("classic")
+  description        String?
+  companyType        String?
+  establishedYear    Int?
+  portfolioUrl       String?
+  website            String?
+  email              String?
+  phone              String?
+  address            String?
+  city               String?
+  province           String?
+  contactPersonName  String?
+  contactPersonRole  String?
+  contactPersonEmail String?
+  contactPersonPhone String?
+  verificationStatus VerificationStatus  @default(pending)
+  verificationNotes  String?
+  documents          DeveloperDocument[]
+  projects           Project[]
+  members            DeveloperUser[]
+  adCampaigns         AdCampaign[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([verificationStatus])
+}
+
+model DeveloperUser {
+  id          String   @id @default(uuid())
+  developerId String
+  userId      String
+  developer   Developer @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([developerId, userId])
+  @@index([userId])
+}
+
+model DeveloperDocument {
+  id           String         @id @default(uuid())
+  developerId  String
+  type         DeveloperDocumentType
+  status       DocumentStatus @default(uploaded)
+  mediaAssetId String
+  notes        String?
+  developer    Developer      @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset     @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([developerId])
+  @@index([status])
+}
+
+model Project {
+  id                 String             @id @default(uuid())
+  developerId         String
+  name               String
+  slug               String             @unique
+  description        String?
+  status             ProjectStatus      @default(under_development)
+  smartReadiness     SmartReadinessLevel @default(none)
+  verificationStatus VerificationStatus @default(pending)
+  startingPrice      Decimal?           @db.Decimal(18, 2)
+  developer          Developer          @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  location           ProjectLocation?
+  units              PropertyUnit[]
+  listings           PropertyListing[]
+  adCampaigns        AdCampaign[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([developerId])
+  @@index([verificationStatus])
+  @@index([status])
+}
+
+model ProjectLocation {
+  id         String   @id @default(uuid())
+  projectId  String   @unique
+  address    String?
+  city       String?
+  area       String?
+  province   String?
+  postalCode String?
+  latitude   Float?
+  longitude  Float?
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model PropertyUnit {
+  id           String       @id @default(uuid())
+  projectId    String
+  title        String
+  slug         String
+  propertyType PropertyType
+  bedrooms     Int?
+  bathrooms    Int?
+  buildingSize Int?
+  landSize     Int?
+  price        Decimal?     @db.Decimal(18, 2)
+  startingPrice Decimal?    @db.Decimal(18, 2)
+  availableUnits Int?       @default(0)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  listings     PropertyListing[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([projectId, slug])
+  @@index([projectId])
+  @@index([propertyType])
+}
+
+model PropertyListing {
+  id                 String            @id @default(uuid())
+  projectId           String
+  unitId              String?
+  title               String
+  slug                String            @unique
+  status              ListingStatus     @default(draft)
+  verificationStatus  VerificationStatus @default(pending)
+  featured            Boolean           @default(false)
+  sponsored           Boolean           @default(false)
+  recommended         Boolean           @default(false)
+  price               Decimal?          @db.Decimal(18, 2)
+  startingPrice       Decimal?          @db.Decimal(18, 2)
+  description         String?
+  specs               Json?
+  smartHomeDetails    Json?
+  brochureMediaAssetId String?
+  project             Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  unit                PropertyUnit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  brochureMediaAsset  MediaAsset?       @relation("BrochureAsset", fields: [brochureMediaAssetId], references: [id], onDelete: SetNull)
+  images              PropertyImage[]
+  smartFeatures       PropertySmartFeature[]
+  leads               Lead[]
+  inquiries           Inquiry[]
+  viewingRequests     ViewingRequest[]
+  mortgageSimulations MortgageSimulation[]
+  adCampaigns         AdCampaign[]
+  favorites           Favorite[]
+  compareItems        CompareItem[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+  @@index([verificationStatus])
+  @@index([featured])
+}
+
+model PropertyImage {
+  id          String      @id @default(uuid())
+  listingId   String
+  mediaAssetId String
+  sortOrder   Int         @default(0)
+  listing     PropertyListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  mediaAsset  MediaAsset  @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  createdAt   DateTime    @default(now())
+
+  @@index([listingId])
+  @@index([sortOrder])
+}
+
+model SmartFeature {
+  id        String              @id @default(uuid())
+  name      String
+  slug      String              @unique
+  category  SmartFeatureCategory
+  listings  PropertySmartFeature[]
+  createdAt DateTime            @default(now())
+}
+
+model PropertySmartFeature {
+  listingId      String
+  smartFeatureId String
+  listing        PropertyListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  smartFeature   SmartFeature    @relation(fields: [smartFeatureId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+
+  @@id([listingId, smartFeatureId])
+  @@index([smartFeatureId])
+}
+
+model VerificationRecord {
+  id         String               @id @default(uuid())
+  entityType VerificationEntityType
+  entityId   String
+  reviewerId String
+  outcome    VerificationOutcome
+  notes      String?
+  checklistResponses VerificationChecklistResponse[]
+  reviewer   User                 @relation("VerificationReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  createdAt  DateTime             @default(now())
+
+  @@index([entityType, entityId])
+  @@index([reviewerId])
+}
+
+model VerificationChecklistItem {
+  id         String               @id @default(uuid())
+  entityType VerificationEntityType
+  key        String
+  label      String
+  isRequired Boolean              @default(false)
+  isActive   Boolean              @default(true)
+  sortOrder  Int                  @default(0)
+  responses  VerificationChecklistResponse[]
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([entityType, key])
+  @@index([entityType])
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model VerificationChecklistResponse {
+  id        String                  @id @default(uuid())
+  recordId  String
+  itemId    String
+  value     Boolean
+  notes     String?
+  record    VerificationRecord      @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  item      VerificationChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime                @default(now())
+
+  @@unique([recordId, itemId])
+  @@index([itemId])
+}
+
+model MortgageBank {
+  id        String            @id @default(uuid())
+  name      String
+  slug      String            @unique
+  isSharia  Boolean           @default(false)
+  products  MortgageProduct[]
+  simulations MortgageSimulation[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model MortgageProduct {
+  id                     String       @id @default(uuid())
+  bankId                 String
+  name                   String
+  slug                   String
+  defaultInterestRate    Decimal?     @db.Decimal(6, 3)
+  promoInterestRate      Decimal?     @db.Decimal(6, 3)
+  fixedPeriodMonths      Int?
+  floatingRateAssumption Decimal?     @db.Decimal(6, 3)
+  shariaMargin           Decimal?     @db.Decimal(6, 3)
+  adminFee               Decimal?     @db.Decimal(18, 2)
+  insuranceRate          Decimal?     @db.Decimal(6, 3)
+  provisiRate            Decimal?     @db.Decimal(6, 3)
+  notaryFeeEstimate      Decimal?     @db.Decimal(18, 2)
+  isActive               Boolean      @default(true)
+  bank                   MortgageBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  simulations            MortgageSimulation[]
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@unique([bankId, slug])
+  @@index([bankId])
+  @@index([isActive])
+}
+
+model MortgageSimulation {
+  id        String       @id @default(uuid())
+  userId    String?
+  listingId String?
+  bankId    String?
+  productId String?
+  inputs    Json
+  results   Json
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  listing   PropertyListing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  bank      MortgageBank? @relation(fields: [bankId], references: [id], onDelete: SetNull)
+  product   MortgageProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  createdAt DateTime     @default(now())
+
+  @@index([userId])
+  @@index([listingId])
+  @@index([createdAt])
+}
+
+model Lead {
+  id        String          @id @default(uuid())
+  userId    String?
+  listingId String
+  name      String
+  email     String?
+  phone     String?
+  message   String?
+  source    LeadSource      @default(web)
+  user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  listing   PropertyListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@index([listingId])
+  @@index([createdAt])
+}
+
+model Inquiry {
+  id        String          @id @default(uuid())
+  userId    String?
+  listingId String
+  name      String
+  email     String?
+  phone     String?
+  message   String?
+  user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  listing   PropertyListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@index([listingId])
+  @@index([createdAt])
+}
+
+model ViewingRequest {
+  id            String              @id @default(uuid())
+  listingId     String
+  userId        String?
+  preferredAt   DateTime
+  notes         String?
+  status        ViewingRequestStatus @default(pending)
+  user          User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  listing       PropertyListing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([listingId])
+  @@index([status])
+}
+
+model AdPackage {
+  id           String        @id @default(uuid())
+  type         AdPackageType @unique
+  name         String
+  price        Decimal       @db.Decimal(18, 2)
+  durationDays Int
+  isActive     Boolean       @default(true)
+  campaigns    AdCampaign[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([isActive])
+}
+
+model AdCampaign {
+  id          String          @id @default(uuid())
+  adPackageId String
+  developerId String
+  projectId   String?
+  listingId   String?
+  status      AdCampaignStatus @default(draft)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  metadata    Json?
+  adPackage   AdPackage       @relation(fields: [adPackageId], references: [id], onDelete: Restrict)
+  developer   Developer       @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  project     Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  listing     PropertyListing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([developerId])
+  @@index([status])
+}
+
+model ArticleCategory {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  articles  Article[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Article {
+  id              String        @id @default(uuid())
+  categoryId      String?
+  title           String
+  slug            String        @unique
+  coverImageUrl   String?
+  excerpt         String?
+  content         String
+  metaTitle       String?
+  metaDescription String?
+  authorName      String?
+  tags            String[]
+  status          ArticleStatus @default(draft)
+  publishedAt     DateTime?
+  category        ArticleCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([publishedAt])
+}
+
+model MediaAsset {
+  id              String          @id @default(uuid())
+  kind            MediaKind
+  storageProvider StorageProvider @default(s3_compat)
+  bucket          String
+  key             String
+  url             String
+  mimeType        String?
+  sizeBytes       Int?
+  width           Int?
+  height          Int?
+  developerDocuments DeveloperDocument[]
+  propertyImages     PropertyImage[]
+  brochureListings   PropertyListing[] @relation("BrochureAsset")
+  createdAt       DateTime        @default(now())
+
+  @@index([kind])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String?
+  entityId   String?
+  ip         String?
+  userAgent  String?
+  metadata   Json?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model Favorite {
+  userId    String
+  listingId String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   PropertyListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@id([userId, listingId])
+  @@index([listingId])
+}
+
+model CompareList {
+  id        String       @id @default(uuid())
+  userId    String
+  name      String       @default("Bandingkan")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CompareItem[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model CompareItem {
+  id            String          @id @default(uuid())
+  compareListId String
+  listingId     String
+  compareList   CompareList     @relation(fields: [compareListId], references: [id], onDelete: Cascade)
+  listing       PropertyListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt     DateTime        @default(now())
+
+  @@unique([compareListId, listingId])
+  @@index([listingId])
+}
+
+model SiteSettings {
+  id          String   @id @default("default")
+  socialLinks Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

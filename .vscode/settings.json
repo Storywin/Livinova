@@ -1,0 +1,22 @@
+{
+  "eslint.workingDirectories": [
+    {
+      "directory": "apps/web",
+      "changeProcessCWD": true
+    },
+    {
+      "directory": "apps/api",
+      "changeProcessCWD": true
+    }
+  ],
+  "files.exclude": {
+    "**/.next": true,
+    "**/dist": true
+  },
+  "search.exclude": {
+    "**/.next": true,
+    "**/dist": true,
+    "**/node_modules": true
+  },
+  "typescript.tsserver.experimental.enableProjectDiagnostics": true
+}

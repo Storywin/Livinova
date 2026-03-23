@@ -1,0 +1,20 @@
+{
+  "name": "livinova",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,magenta \"npm -w @livinova/web run dev\" \"npm -w @livinova/api run start:dev\"",
+    "build": "npm -w @livinova/api run build && npm -w @livinova/web run build",
+    "lint": "npm -w @livinova/api run lint && npm -w @livinova/web run lint",
+    "typecheck": "npm -w @livinova/api run typecheck && npm -w @livinova/web run typecheck",
+    "prisma:generate": "npm -w @livinova/api run prisma:generate",
+    "prisma:migrate": "npm -w @livinova/api run prisma:migrate",
+    "prisma:seed": "npm -w @livinova/api run prisma:seed"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
