@@ -113,6 +113,8 @@ export class MortgageService {
     const totalDownPayment = input.downPayment + totalFees;
 
     let monthlyInstallment = 0;
+    let laterMonthlyInstallment: number | null = null;
+    const schedule: Array<{ months: number; monthly: number; ratePercent: number; kind: string }> = [];
     let assumption: Record<string, unknown> = {};
 
     if (product.bank.isSharia) {
@@ -122,16 +124,71 @@ export class MortgageService {
         mode: "sharia_fixed",
         annualMarginPercent: margin,
       };
+      schedule.push({
+        months: input.tenorMonths,
+        monthly: roundCurrency(monthlyInstallment),
+        ratePercent: margin,
+        kind: "sharia_fixed",
+      });
     } else {
-      const annualRate =
+      const fixedMonths = product.fixedPeriodMonths ?? 0;
+      const fixedRate =
         toNumber(product.promoInterestRate) || toNumber(product.defaultInterestRate);
-      monthlyInstallment = monthlyPaymentAnnuity(financing, annualRate, input.tenorMonths);
-      assumption = {
-        mode: "annuity",
-        annualInterestRatePercent: annualRate,
-        fixedPeriodMonths: product.fixedPeriodMonths,
-        floatingRateAssumption: toNumber(product.floatingRateAssumption),
-      };
+      const floatRate =
+        toNumber(product.floatingRateAssumption) || fixedRate;
+
+      if (fixedMonths > 0 && fixedMonths < input.tenorMonths) {
+        const pmtFixed = monthlyPaymentAnnuity(financing, fixedRate, input.tenorMonths);
+        monthlyInstallment = pmtFixed;
+        // remaining principal after fixedMonths payments at fixedRate
+        const r = fixedRate / 100 / 12;
+        const n = input.tenorMonths;
+        const k = fixedMonths;
+        const powN = Math.pow(1 + r, n);
+        const powK = Math.pow(1 + r, k);
+        const remaining =
+          financing * (powN / powK) - pmtFixed * ((powN - powK) / (r * powK));
+        const remainingClamped = Math.max(0, remaining);
+        const remainingMonths = input.tenorMonths - fixedMonths;
+        laterMonthlyInstallment = monthlyPaymentAnnuity(
+          remainingClamped,
+          floatRate,
+          remainingMonths,
+        );
+        schedule.push({
+          months: fixedMonths,
+          monthly: roundCurrency(pmtFixed),
+          ratePercent: fixedRate,
+          kind: "fixed",
+        });
+        schedule.push({
+          months: remainingMonths,
+          monthly: roundCurrency(laterMonthlyInstallment),
+          ratePercent: floatRate,
+          kind: "floating_assumption",
+        });
+        assumption = {
+          mode: "annuity_two_phase",
+          fixedRatePercent: fixedRate,
+          fixedPeriodMonths: fixedMonths,
+          floatingRateAssumptionPercent: floatRate,
+        };
+      } else {
+        const annualRate = fixedRate;
+        monthlyInstallment = monthlyPaymentAnnuity(financing, annualRate, input.tenorMonths);
+        schedule.push({
+          months: input.tenorMonths,
+          monthly: roundCurrency(monthlyInstallment),
+          ratePercent: annualRate,
+          kind: "annuity",
+        });
+        assumption = {
+          mode: "annuity",
+          annualInterestRatePercent: annualRate,
+          fixedPeriodMonths: product.fixedPeriodMonths,
+          floatingRateAssumption: toNumber(product.floatingRateAssumption),
+        };
+      }
     }
 
     monthlyInstallment = roundCurrency(monthlyInstallment);
@@ -180,6 +237,10 @@ export class MortgageService {
       },
       outputs: {
         monthlyInstallment,
+        laterMonthlyInstallment: laterMonthlyInstallment
+          ? roundCurrency(laterMonthlyInstallment)
+          : null,
+        schedule,
         estimatedTotalPayment,
         affordabilityRatio,
       },
