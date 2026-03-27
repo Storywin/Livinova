@@ -1,19 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ReactNode, useEffect, useMemo } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
 import { getAccessToken, isAdminToken, parseJwt } from "@/lib/auth";
 
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const token = useMemo(() => getAccessToken(), []);
+  const [hydrated, setHydrated] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHydrated(true);
+    setToken(getAccessToken());
+  }, []);
+
   const payload = token ? parseJwt(token) : null;
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!token) router.replace("/auth/login");
-  }, [router, token]);
+  }, [hydrated, router, token]);
 
+  if (!hydrated) return null;
   if (!token) return null;
 
   if (!isAdminToken(token)) {
@@ -33,4 +42,3 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
     </div>
   );
 }
-

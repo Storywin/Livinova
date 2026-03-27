@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -20,6 +21,7 @@ type MyDeveloper = {
 };
 
 type MeResponse = { developers: MyDeveloper[] };
+type UpdateTemplateResponse = { id: string; slug: string; name: string; profileTemplate: string; updatedAt: string };
 
 const templates = [
   { value: "classic", title: "Classic", description: "Tampilan bersih dan profesional untuk company profile." },
@@ -28,7 +30,9 @@ const templates = [
 ] as const;
 
 export default function DeveloperDashboardPage() {
+  const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [selectedDeveloperId, setSelectedDeveloperId] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("classic");
 
@@ -37,28 +41,48 @@ export default function DeveloperDashboardPage() {
     queryFn: () => apiFetchWithAuth<MeResponse>("/developer/me"),
   });
 
-  const developers = meQuery.data?.developers ?? [];
+  const developers = useMemo(() => meQuery.data?.developers ?? [], [meQuery.data?.developers]);
 
   useEffect(() => {
     if (!developers.length) return;
-    const current = developers[0];
-    setSelectedDeveloperId((v) => v ?? current.id);
-    setSelectedTemplate((v) => (v ? v : current.profileTemplate || "classic"));
-  }, [developers]);
+    if (!selectedDeveloperId) {
+      const current = developers[0];
+      setSelectedDeveloperId(current.id);
+      setSelectedTemplate(current.profileTemplate || "classic");
+      return;
+    }
+    const current = developers.find((d) => d.id === selectedDeveloperId) ?? null;
+    if (current) setSelectedTemplate(current.profileTemplate || "classic");
+  }, [developers, selectedDeveloperId]);
 
-  const activeDeveloper = useMemo(() => developers.find((d) => d.id === selectedDeveloperId) ?? null, [developers, selectedDeveloperId]);
+  const activeDeveloper = useMemo(
+    () => developers.find((d) => d.id === selectedDeveloperId) ?? null,
+    [developers, selectedDeveloperId],
+  );
+  const canOpenPublicProfile = activeDeveloper?.verificationStatus === "approved";
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedDeveloperId) throw new Error("Developer tidak ditemukan");
-      return apiFetchWithAuth("/developer/profile-template", {
+      const result = await apiFetchWithAuth<UpdateTemplateResponse | null>("/developer/profile-template", {
         method: "PUT",
         body: JSON.stringify({ developerId: selectedDeveloperId, profileTemplate: selectedTemplate }),
       });
+      if (!result) throw new Error("Gagal menyimpan template");
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
       setError(null);
-      meQuery.refetch();
+      setSuccess("Template berhasil disimpan");
+      qc.setQueryData<MeResponse>(["developer-me"], (prev) => {
+        if (!prev) return prev;
+        return {
+          developers: prev.developers.map((d) =>
+            d.id === updated.id ? { ...d, profileTemplate: updated.profileTemplate } : d,
+          ),
+        };
+      });
+      setSelectedTemplate(updated.profileTemplate);
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Gagal menyimpan template"),
   });
@@ -71,15 +95,55 @@ export default function DeveloperDashboardPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Dashboard Developer</h1>
-                <div className="mt-1 text-sm text-slate-600">Kelola tampilan profil developer yang tampil di publik.</div>
+                <div className="mt-1 text-sm text-slate-600">Kelola profil, project, dan listing.</div>
               </div>
               {activeDeveloper ? (
-                <Button asChild variant="outline" className="rounded-xl">
-                  <Link href={`/developer/${activeDeveloper.slug}`} target="_blank">
-                    Lihat Profil Publik
-                  </Link>
-                </Button>
+                <div className="flex flex-col items-end gap-1">
+                  {canOpenPublicProfile ? (
+                    <Button asChild variant="outline" className="rounded-xl">
+                      <Link href={`/developer/${activeDeveloper.slug}`} target="_blank">
+                        Lihat Profil Publik
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" className="rounded-xl" disabled>
+                      Lihat Profil Publik
+                    </Button>
+                  )}
+                  {!canOpenPublicProfile ? (
+                    <div className="text-xs text-slate-500">Profil publik tampil setelah status developer approved.</div>
+                  ) : null}
+                </div>
               ) : null}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle>Project</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-slate-600">
+                  Buat dan kelola proyek. Project dipakai sebagai wadah untuk listing.
+                  <div className="mt-4">
+                    <Button asChild variant="outline" className="rounded-xl">
+                      <Link href="/developer/projects">Kelola Project</Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle>Listing</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-slate-600">
+                  Buat draft, upload foto, lalu submit listing untuk verifikasi.
+                  <div className="mt-4">
+                    <Button asChild className="rounded-xl bg-slate-900 text-white hover:bg-slate-800">
+                      <Link href="/developer/listings">Kelola Listing</Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             <Card className="shadow-sm">
@@ -89,6 +153,9 @@ export default function DeveloperDashboardPage() {
               <CardContent className="space-y-5">
                 {error ? (
                   <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+                ) : null}
+                {success ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{success}</div>
                 ) : null}
 
                 <div className="space-y-2">
@@ -136,7 +203,11 @@ export default function DeveloperDashboardPage() {
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     className="rounded-xl bg-slate-900 text-white hover:bg-slate-800"
-                    onClick={() => saveMutation.mutate()}
+                    onClick={() => {
+                      setError(null);
+                      setSuccess(null);
+                      saveMutation.mutate();
+                    }}
                     disabled={!selectedDeveloperId || saveMutation.isPending}
                   >
                     {saveMutation.isPending ? "Menyimpan..." : "Simpan"}
@@ -150,4 +221,3 @@ export default function DeveloperDashboardPage() {
     </main>
   );
 }
-

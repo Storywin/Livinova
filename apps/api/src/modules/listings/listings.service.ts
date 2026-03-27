@@ -141,6 +141,9 @@ export class ListingsService {
           smartFeatures: {
             include: { smartFeature: true },
           },
+          ratings: {
+            select: { rating: true },
+          },
         },
       }),
     ]);
@@ -152,63 +155,71 @@ export class ListingsService {
       pageSize,
       totalItems,
       totalPages,
-      items: items.map((l) => ({
-        id: l.id,
-        title: l.title,
-        slug: l.slug,
-        status: l.status,
-        verificationStatus: l.verificationStatus,
-        featured: l.featured,
-        sponsored: l.sponsored,
-        recommended: l.recommended,
-        price: l.price?.toString() ?? null,
-        startingPrice: l.startingPrice?.toString() ?? null,
-        unit: l.unit
-          ? {
-              id: l.unit.id,
-              propertyType: l.unit.propertyType,
-              bedrooms: l.unit.bedrooms,
-              bathrooms: l.unit.bathrooms,
-              buildingSize: l.unit.buildingSize,
-              landSize: l.unit.landSize,
-              availableUnits: l.unit.availableUnits,
-            }
-          : null,
-        specs: l.specs,
-        project: {
-          id: l.project.id,
-          name: l.project.name,
-          slug: l.project.slug,
-          status: l.project.status,
-          smartReadiness: l.project.smartReadiness,
-          startingPrice: l.project.startingPrice?.toString() ?? null,
-          developer: {
-            id: l.project.developer.id,
-            name: l.project.developer.name,
-            slug: l.project.developer.slug,
-          },
-          location: l.project.location
+      items: items.map((l) => {
+        const ratingCount = l.ratings.length;
+        const averageRating =
+          ratingCount > 0 ? l.ratings.reduce((acc, r) => acc + r.rating, 0) / ratingCount : 0;
+
+        return {
+          id: l.id,
+          title: l.title,
+          slug: l.slug,
+          status: l.status,
+          verificationStatus: l.verificationStatus,
+          featured: l.featured,
+          sponsored: l.sponsored,
+          recommended: l.recommended,
+          price: l.price?.toString() ?? null,
+          startingPrice: l.startingPrice?.toString() ?? null,
+          averageRating: Number(averageRating.toFixed(1)),
+          ratingCount,
+          unit: l.unit
             ? {
-                city: l.project.location.city,
-                area: l.project.location.area,
-                province: l.project.location.province,
+                id: l.unit.id,
+                propertyType: l.unit.propertyType,
+                bedrooms: l.unit.bedrooms,
+                bathrooms: l.unit.bathrooms,
+                buildingSize: l.unit.buildingSize,
+                landSize: l.unit.landSize,
+                availableUnits: l.unit.availableUnits,
               }
             : null,
-        },
-        images: l.images.map((img) => ({
-          id: img.id,
-          url: img.mediaAsset.url,
-          kind: img.mediaAsset.kind,
-        })),
-        smartFeatures: l.smartFeatures.map((sf) => ({
-          id: sf.smartFeature.id,
-          name: sf.smartFeature.name,
-          slug: sf.smartFeature.slug,
-          category: sf.smartFeature.category,
-        })),
-        createdAt: l.createdAt,
-        updatedAt: l.updatedAt,
-      })),
+          specs: l.specs,
+          project: {
+            id: l.project.id,
+            name: l.project.name,
+            slug: l.project.slug,
+            status: l.project.status,
+            smartReadiness: l.project.smartReadiness,
+            startingPrice: l.project.startingPrice?.toString() ?? null,
+            developer: {
+              id: l.project.developer.id,
+              name: l.project.developer.name,
+              slug: l.project.developer.slug,
+            },
+            location: l.project.location
+              ? {
+                  city: l.project.location.city,
+                  area: l.project.location.area,
+                  province: l.project.location.province,
+                }
+              : null,
+          },
+          images: l.images.map((img) => ({
+            id: img.id,
+            url: img.mediaAsset.url,
+            kind: img.mediaAsset.kind,
+          })),
+          smartFeatures: l.smartFeatures.map((sf) => ({
+            id: sf.smartFeature.id,
+            name: sf.smartFeature.name,
+            slug: sf.smartFeature.slug,
+            category: sf.smartFeature.category,
+          })),
+          createdAt: l.createdAt,
+          updatedAt: l.updatedAt,
+        };
+      }),
     };
   }
 
@@ -238,10 +249,17 @@ export class ListingsService {
         smartFeatures: {
           include: { smartFeature: true },
         },
+        ratings: {
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
     if (!listing) return null;
+
+    const ratingCount = listing.ratings.length;
+    const averageRating =
+      ratingCount > 0 ? listing.ratings.reduce((acc, r) => acc + r.rating, 0) / ratingCount : 0;
 
     return {
       id: listing.id,
@@ -255,18 +273,15 @@ export class ListingsService {
       recommended: listing.recommended,
       status: listing.status,
       verificationStatus: listing.verificationStatus,
-      unit: listing.unit
-        ? {
-            id: listing.unit.id,
-            title: listing.unit.title,
-            propertyType: listing.unit.propertyType,
-            bedrooms: listing.unit.bedrooms,
-            bathrooms: listing.unit.bathrooms,
-            buildingSize: listing.unit.buildingSize,
-            landSize: listing.unit.landSize,
-            availableUnits: listing.unit.availableUnits,
-          }
-        : null,
+      averageRating: Number(averageRating.toFixed(1)),
+      ratingCount,
+      ratings: listing.ratings.map((r) => ({
+        id: r.id,
+        rating: r.rating,
+        name: r.isAnonymous ? "Anonymous" : r.name || "Anonymous",
+        comment: r.comment,
+        createdAt: r.createdAt,
+      })),
       project: {
         id: listing.project.id,
         name: listing.project.name,
@@ -293,6 +308,18 @@ export class ListingsService {
           verificationStatus: listing.project.developer.verificationStatus,
         },
       },
+      unit: listing.unit
+        ? {
+            id: listing.unit.id,
+            title: listing.unit.title,
+            propertyType: listing.unit.propertyType,
+            bedrooms: listing.unit.bedrooms,
+            bathrooms: listing.unit.bathrooms,
+            buildingSize: listing.unit.buildingSize,
+            landSize: listing.unit.landSize,
+            availableUnits: listing.unit.availableUnits,
+          }
+        : null,
       images: listing.images.map((img) => ({
         id: img.id,
         url: img.mediaAsset.url,
@@ -308,5 +335,20 @@ export class ListingsService {
       createdAt: listing.createdAt,
       updatedAt: listing.updatedAt,
     };
+  }
+
+  async submitRating(
+    listingId: string,
+    input: { rating: number; name?: string; comment?: string; isAnonymous?: boolean },
+  ) {
+    return this.prisma.propertyRating.create({
+      data: {
+        listingId,
+        rating: input.rating,
+        name: input.name?.trim() || null,
+        comment: input.comment?.trim() || null,
+        isAnonymous: input.isAnonymous ?? false,
+      },
+    });
   }
 }

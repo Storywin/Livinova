@@ -18,10 +18,17 @@ type Product = {
   id: string;
   name: string;
   bank: { name: string; slug: string; isSharia: boolean };
+  sourceUrl?: string | null;
+  sourceCheckedAt?: string | null;
+  notes?: string | null;
 };
 
 type SimulationResult = {
-  outputs: { monthlyInstallment: number };
+  outputs: {
+    monthlyInstallment: number;
+    laterMonthlyInstallment: number | null;
+    schedule: Array<{ months: number; monthly: number; ratePercent: number; kind: string }>;
+  };
   bank: { name: string; isSharia: boolean };
   product: { name: string };
 };
@@ -338,14 +345,60 @@ export function KprQuick() {
               </Button>
 
               {simulate.data ? (
-                <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estimasi Cicilan Bulanan</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
-                    {formatRupiah(simulate.data.outputs.monthlyInstallment)}
+                <div className="space-y-3 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estimasi Cicilan Bulanan</div>
+                    <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                      {formatRupiah(simulate.data.outputs.monthlyInstallment)}
+                      <span className="ml-2 text-sm font-semibold text-slate-600">/ bulan</span>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {simulate.data.bank.name} — {simulate.data.product.name}
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    {simulate.data.bank.name} — {simulate.data.product.name}
-                  </div>
+
+                  {simulate.data.outputs.laterMonthlyInstallment ? (
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                      Estimasi setelah masa promo/fase awal:{" "}
+                      <span className="font-semibold text-slate-900">
+                        {formatRupiah(simulate.data.outputs.laterMonthlyInstallment)}
+                      </span>
+                      <span className="text-slate-600"> / bulan</span>
+                    </div>
+                  ) : null}
+
+                  {simulate.data.outputs.schedule?.length ? (
+                    <div className="grid gap-2">
+                      {simulate.data.outputs.schedule.slice(0, 3).map((s, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900">{s.months} bulan</div>
+                            <div className="text-xs text-slate-600">{Number(s.ratePercent).toFixed(2)}% / tahun</div>
+                          </div>
+                          <div className="font-semibold text-slate-900">{formatRupiah(s.monthly)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {selected?.sourceUrl ? (
+                    <div className="text-xs text-slate-500">
+                      Sumber bunga:{" "}
+                      <a
+                        className="font-semibold text-sky-700 hover:text-sky-800 hover:underline"
+                        href={selected.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {selected.bank.name}
+                      </a>
+                      {selected.sourceCheckedAt ? (
+                        <span> • dicek {new Date(selected.sourceCheckedAt).toLocaleDateString("id-ID")}</span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-500">Suku bunga dapat berubah sewaktu-waktu sesuai kebijakan bank.</div>
+                  )}
                 </div>
               ) : null}
             </CardContent>

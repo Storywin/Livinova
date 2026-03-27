@@ -1,22 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ReactNode, useEffect, useMemo } from "react";
+import { ReactNode, useEffect } from "react";
 
-import { getAccessToken, isDeveloperToken, parseJwt } from "@/lib/auth";
+import { useAuthStore } from "@/store/auth";
+import { parseJwt } from "@/lib/auth";
 
 export function RequireDeveloper({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const token = useMemo(() => getAccessToken(), []);
-  const payload = token ? parseJwt(token) : null;
+  const { token, hydrated, roles } = useAuthStore();
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!token) router.replace("/auth/login");
-  }, [router, token]);
+  }, [hydrated, router, token]);
 
+  if (!hydrated) return null;
   if (!token) return null;
 
-  if (!isDeveloperToken(token)) {
+  const payload = parseJwt(token);
+
+  if (!roles.includes("developer")) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700">
         Akses ditolak. Akun kamu tidak memiliki hak developer.
@@ -33,4 +37,3 @@ export function RequireDeveloper({ children }: { children: ReactNode }) {
     </div>
   );
 }
-

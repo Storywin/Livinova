@@ -1,4 +1,4 @@
-import { ValidationPipe } from "@nestjs/common";
+import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
@@ -6,6 +6,7 @@ import helmet from "helmet";
 import { AppModule } from "./modules/app/app.module";
 
 async function bootstrap() {
+  const logger = new Logger("Bootstrap");
   const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
@@ -34,6 +35,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ? Number(process.env.PORT) : 4000;
   await app.listen(port);
+  logger.log(`Aplikasi API berjalan di port ${port}`);
 }
 
 void bootstrap();

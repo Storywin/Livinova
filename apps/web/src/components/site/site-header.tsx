@@ -3,21 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { parseJwt } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/auth";
 
 import { Container } from "./container";
 
 const nav = [
   { href: "/properti", label: "Properti" },
   { href: "/kpr", label: "Simulasi KPR" },
+  { href: "/clik-credit-score", label: "CLIK Credit Score" },
+  { href: "/erp-properti", label: "ERP Properti" },
 ];
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
+  const { token, hydrated, roles, setToken } = useAuthStore();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 6);
@@ -25,6 +32,8 @@ export function SiteHeader() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  const isAuthed = Boolean(token);
 
   return (
     <header
@@ -68,12 +77,35 @@ export function SiteHeader() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost">
-            <Link href="/auth/login">Masuk</Link>
-          </Button>
-          <Button asChild className="bg-slate-900 text-white hover:bg-slate-800">
-            <Link href="/developer/daftar">Untuk Developer</Link>
-          </Button>
+          {!hydrated ? null : isAuthed ? (
+            <>
+              <Button asChild variant="ghost">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-200 bg-white hover:bg-slate-50"
+                onClick={() => {
+                  localStorage.removeItem("livinova_access_token");
+                  localStorage.removeItem("livinova_refresh_token");
+                  setToken(null);
+                  if (roles.includes("developer")) router.replace("/auth/login");
+                  else router.replace("/");
+                }}
+              >
+                Keluar
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button asChild variant="ghost">
+                <Link href="/auth/login">Masuk</Link>
+              </Button>
+              <Button asChild className="bg-slate-900 text-white hover:bg-slate-800">
+                <Link href="/developer/daftar">Untuk Developer</Link>
+              </Button>
+            </>
+          )}
         </div>
       </Container>
     </header>

@@ -4,6 +4,29 @@ Website: livinova.id
 Makna: Living + Nova (baru, inovatif)
 Kesan: modern, elegan, cocok untuk skala nasional.
 
+- Super Admin
+- Email: superadmin@livinova.local
+- Password: Admin12345!
+- Admin
+
+- Email: admin@livinova.local
+- Password: Admin12345!
+- Verifier
+
+- Email: verifier@livinova.local
+- Password: Verifier12345!
+- Developer
+
+- Email: developer@livinova.local
+- Password: Developer12345!
+- Buyer
+
+- Email: buyer@livinova.local
+- Password: Buyer12345!
+- Public
+
+- Email: public@livinova.local
+- Password: Public12345!
 
 
 You are a senior full-stack software architect and product engineer.

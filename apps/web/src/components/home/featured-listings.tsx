@@ -1,10 +1,11 @@
 import Link from "next/link";
 import Image from "next/image";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Star } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { formatRupiah } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type ListingSpecs = {
   floors?: number | null;
@@ -37,6 +38,8 @@ type PublicListingItem = {
     developer: { name: string; slug: string };
     location: { city: string | null; area: string | null; province: string | null } | null;
   };
+  averageRating: number;
+  ratingCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -210,6 +213,26 @@ export async function FeaturedListings() {
                             ) : null}
                           </div>
                           {locationText ? <div className="mt-1 text-xs text-slate-500">{locationText}</div> : null}
+                          
+                          {item.ratingCount > 0 && (
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <div className="flex items-center gap-0.5">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star
+                                    key={s}
+                                    className={cn(
+                                      "h-3 w-3",
+                                      s <= Math.round(item.averageRating)
+                                        ? "fill-amber-400 text-amber-400"
+                                        : "fill-slate-100 text-slate-200"
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-900">{item.averageRating.toFixed(1)}</span>
+                              <span className="text-[10px] text-slate-400">({item.ratingCount})</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

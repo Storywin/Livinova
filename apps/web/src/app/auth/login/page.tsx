@@ -47,7 +47,7 @@ export default function LoginPage() {
 
       localStorage.setItem("livinova_access_token", result.tokens.accessToken);
       localStorage.setItem("livinova_refresh_token", result.tokens.refreshToken);
-      router.push("/");
+      router.push("/dashboard");
     } catch (e) {
       if (e instanceof z.ZodError) {
         setError(e.issues[0]?.message ?? "Data tidak valid");

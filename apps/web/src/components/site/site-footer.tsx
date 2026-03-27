@@ -126,13 +126,8 @@ function socialHoverClass(platform: string) {
   return "hover:bg-slate-50 hover:text-slate-900";
 }
 
-export async function SiteFooter() {
-  const fetched = await getSiteSocialLinks();
-  const byPlatform = new Map<string, SocialLink>();
-  for (const s of fetched) byPlatform.set(s.platform.toLowerCase(), s);
-  const defaults = defaultSocialLinks.map((d) => byPlatform.get(d.platform.toLowerCase()) ?? d);
-  const extra = fetched.filter((s) => !defaultSocialLinks.some((d) => d.platform.toLowerCase() === s.platform.toLowerCase()));
-  const socialLinks = [...defaults, ...extra];
+export function SiteFooter() {
+  const socialLinks = defaultSocialLinks;
   return (
     <footer className="border-t border-slate-200 bg-white">
       <Container className="py-10">

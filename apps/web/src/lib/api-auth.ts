@@ -9,17 +9,35 @@ function getErrorMessage(body: unknown) {
 }
 
 export async function apiFetchWithAuth<T>(path: string, init?: RequestInit): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (!baseUrl) throw new Error("NEXT_PUBLIC_API_URL belum di-set");
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (!configured) throw new Error("NEXT_PUBLIC_API_URL belum di-set");
+
+  let baseUrl = configured;
+  if (typeof window !== "undefined") {
+    try {
+      const u = new URL(configured);
+      const isLoopback = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+      const currentHost = window.location.hostname;
+      const isCurrentLoopback = currentHost === "localhost" || currentHost === "127.0.0.1";
+      if (isLoopback && !isCurrentLoopback) {
+        u.hostname = currentHost;
+        baseUrl = u.origin;
+      }
+    } catch {
+      baseUrl = configured;
+    }
+  }
 
   const token = getAccessToken();
   if (!token) throw new ApiError("Silakan login terlebih dahulu", 401);
 
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(init?.headers ?? {}),
     },
   });
@@ -34,4 +52,3 @@ export async function apiFetchWithAuth<T>(path: string, init?: RequestInit): Pro
 
   return body as T;
 }
-

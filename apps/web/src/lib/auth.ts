@@ -38,3 +38,15 @@ export function isDeveloperToken(token: string) {
   const roles = payload?.roles ?? [];
   return roles.includes("developer") || roles.includes("admin") || roles.includes("super_admin");
 }
+
+export function isVerifierToken(token: string) {
+  const payload = parseJwt(token);
+  const roles = payload?.roles ?? [];
+  return roles.includes("verifier") || roles.includes("admin") || roles.includes("super_admin");
+}
+
+export function isBuyerToken(token: string) {
+  const payload = parseJwt(token);
+  const roles = payload?.roles ?? [];
+  return roles.includes("buyer") || roles.includes("admin") || roles.includes("super_admin");
+}

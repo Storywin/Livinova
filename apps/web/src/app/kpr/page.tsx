@@ -29,12 +29,18 @@ type Product = {
   defaultInterestRate: string | null;
   promoInterestRate: string | null;
   fixedPeriodMonths: number | null;
+  minTenorMonths: number | null;
+  rateSchedule: Array<{ months: number; ratePercent: number; kind?: string }> | null;
   floatingRateAssumption: string | null;
   shariaMargin: string | null;
   adminFee: string | null;
   insuranceRate: string | null;
   provisiRate: string | null;
   notaryFeeEstimate: string | null;
+  sourceUrl: string | null;
+  sourceTitle: string | null;
+  sourceCheckedAt: string | null;
+  notes: string | null;
   isActive: boolean;
 };
 
@@ -68,6 +74,8 @@ type SimulationResult = {
   };
   outputs: {
     monthlyInstallment: number;
+    laterMonthlyInstallment: number | null;
+    schedule: Array<{ months: number; monthly: number; ratePercent: number; kind: string }>;
     estimatedTotalPayment: number;
     affordabilityRatio: number | null;
   };
@@ -559,10 +567,47 @@ function MortgagePageClient() {
                       <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
                         {formatRupiah(result.outputs.monthlyInstallment)}
                       </div>
+                      {result.outputs.laterMonthlyInstallment ? (
+                        <div className="mt-2 text-sm text-slate-700">
+                          Estimasi setelah masa promo/fase awal:{" "}
+                          <span className="font-semibold text-slate-900">{formatRupiah(result.outputs.laterMonthlyInstallment)}</span>
+                          <span className="text-slate-600"> / bulan</span>
+                        </div>
+                      ) : null}
                       <div className="mt-2 text-sm text-slate-600">
                         Total perkiraan pembayaran: <span className="font-semibold text-slate-900">{formatRupiah(result.outputs.estimatedTotalPayment)}</span>
                       </div>
                     </div>
+
+                    {result.outputs.schedule?.length ? (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-sm font-semibold text-slate-900">Ringkasan Fase</div>
+                        <div className="mt-3 grid gap-2">
+                          {result.outputs.schedule.map((s, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-900">{s.months} bulan</div>
+                                <div className="text-xs text-slate-600">{Number(s.ratePercent).toFixed(2)}% / tahun</div>
+                              </div>
+                              <div className="font-semibold text-slate-900">{formatRupiah(s.monthly)}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {selectedProduct?.sourceUrl ? (
+                          <div className="mt-3 text-xs text-slate-500">
+                            Sumber bunga:{" "}
+                            <a className="font-semibold text-sky-700 hover:text-sky-800 hover:underline" href={selectedProduct.sourceUrl} target="_blank" rel="noreferrer">
+                              {selectedProduct.sourceTitle ?? selectedProduct.bank.name}
+                            </a>
+                            {selectedProduct.sourceCheckedAt ? (
+                              <span> • dicek {new Date(selectedProduct.sourceCheckedAt).toLocaleDateString("id-ID")}</span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="mt-3 text-xs text-slate-500">Suku bunga dapat berubah sewaktu-waktu sesuai kebijakan bank.</div>
+                        )}
+                      </div>
+                    ) : null}
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -609,6 +654,12 @@ function MortgagePageClient() {
                       <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
                         Rasio cicilan/penghasilan:{" "}
                         <span className="font-semibold text-slate-900">{(result.outputs.affordabilityRatio * 100).toFixed(1)}%</span>
+                      </div>
+                    ) : null}
+
+                    {selectedProduct?.notes ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+                        {selectedProduct.notes}
                       </div>
                     ) : null}
                   </>

@@ -65,6 +65,217 @@ async function main() {
     role: RoleName.super_admin,
   });
 
+  // --- ERP DEMO ACCOUNTS ---
+  // 1. Partner (Perusahaan B)
+  await upsertDemoUser({
+    email: "distributor@companya.id",
+    password: "Partner12345!",
+    name: "Partner Company A",
+    role: RoleName.partner,
+  });
+
+  const partner = await prisma.partner.upsert({
+    where: { email: "distributor@companya.id" },
+    update: { name: "Partner Company A" },
+    create: {
+      name: "Partner Company A",
+      email: "distributor@companya.id",
+      phone: "0812-3456-7890",
+    },
+  });
+
+  // 2. Tenant Admin (Perusahaan C)
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: "properti-sejahtera" },
+    update: {
+      name: "PT Properti Sejahtera",
+      status: "active",
+      partnerId: partner.id,
+    },
+    create: {
+      name: "PT Properti Sejahtera",
+      slug: "properti-sejahtera",
+      status: "active",
+      partnerId: partner.id,
+    },
+  });
+
+  const tenantAdminUser = await upsertDemoUser({
+    email: "admin@properti.co.id",
+    password: "Tenant12345!",
+    name: "Admin Properti Sejahtera",
+    role: RoleName.tenant_admin,
+  });
+
+  await prisma.user.update({
+    where: { id: tenantAdminUser.id },
+    data: { tenantId: tenant.id },
+  });
+
+  // 2.1 Licensed Staff (Sales)
+  const salesUser = await upsertDemoUser({
+    email: "sales@properti.co.id",
+    password: "Staff12345!",
+    name: "Sales Properti Sejahtera",
+    role: RoleName.erp_user, // Use erp_user for staff
+  });
+
+  await prisma.user.update({
+    where: { id: salesUser.id },
+    data: { tenantId: tenant.id },
+  });
+
+  // 3. Create initial license for tenant
+  const startDate = new Date();
+  const endDate = new Date();
+  endDate.setFullYear(startDate.getFullYear() + 1);
+
+  await prisma.license.upsert({
+    where: { id: "demo-license-id" }, // Using a fixed ID for upsert
+    update: { endDate, status: "active" },
+    create: {
+      id: "demo-license-id",
+      tenantId: tenant.id,
+      userId: tenantAdminUser.id,
+      startDate,
+      endDate,
+      status: "active",
+      deviceName: "Enterprise Pro Activation",
+    },
+  });
+
+  // --- ERP TENANT DUMMY DATA ---
+  // 4. Create ERP Projects for Tenant
+  let erpProject = await prisma.erpProject.findFirst({
+    where: { tenantId: tenant.id, name: "Griya Livinova Residence" },
+  });
+
+  if (!erpProject) {
+    erpProject = await prisma.erpProject.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Griya Livinova Residence",
+        description: "Hunian asri dengan konsep smart living di pusat kota.",
+      },
+    });
+  }
+
+  // 5. Create ERP Units for Project
+  const unitCodes = ["A-01", "A-02", "A-03", "B-01", "B-02", "C-01"];
+  for (const code of unitCodes) {
+    await prisma.erpUnit.upsert({
+      where: { projectId_unitCode: { projectId: erpProject.id, unitCode: code } },
+      update: {
+        status: code === "A-01" ? "booked" : code === "B-01" ? "sold" : "available",
+        price: new Prisma.Decimal(750000000),
+      },
+      create: {
+        projectId: erpProject.id,
+        unitCode: code,
+        status: code === "A-01" ? "booked" : code === "B-01" ? "sold" : "available",
+        price: new Prisma.Decimal(750000000),
+      },
+    });
+  }
+
+  // 6. Create ERP Customers
+  let erpCustomer = await prisma.erpCustomer.findFirst({
+    where: { tenantId: tenant.id, email: "budi.santoso@gmail.com" },
+  });
+
+  if (!erpCustomer) {
+    erpCustomer = await prisma.erpCustomer.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Budi Santoso",
+        email: "budi.santoso@gmail.com",
+        phone: "08123456789",
+        address: "Jl. Melati No. 12, Jakarta",
+      },
+    });
+  }
+
+  // 7. Create ERP Sales
+  const bookedUnit = await prisma.erpUnit.findFirst({
+    where: { projectId: erpProject.id, unitCode: "A-01" },
+  });
+  if (bookedUnit) {
+    const existingSales = await prisma.erpSales.findFirst({
+      where: { tenantId: tenant.id, unitId: bookedUnit.id },
+    });
+
+    if (!existingSales) {
+      await prisma.erpSales.create({
+        data: {
+          tenantId: tenant.id,
+          projectId: erpProject.id,
+          unitId: bookedUnit.id,
+          customerId: erpCustomer.id,
+          totalPrice: bookedUnit.price,
+          status: "approved",
+        },
+      });
+    }
+  }
+
+  // 8. Seed COA for Demo Tenant
+  const existingAccounts = await prisma.erpAccount.count({ where: { tenantId: tenant.id } });
+  if (existingAccounts === 0) {
+    const standardCOA = [
+      { code: "101.01", name: "Kas Utama (Cash on Hand)", type: "asset" },
+      { code: "101.02", name: "Bank Mandiri Operasional", type: "asset" },
+      { code: "101.03", name: "Bank BCA Escrow", type: "asset" },
+      { code: "102.01", name: "Piutang Usaha Konsumen", type: "asset" },
+      { code: "103.01", name: "Persediaan Lahan Mentah", type: "asset" },
+      { code: "103.03", name: "Pekerjaan Dalam Pelaksanaan (WIP)", type: "asset" },
+      { code: "201.01", name: "Hutang Usaha - Subkontraktor", type: "liability" },
+      { code: "202.01", name: "Uang Muka Konsumen - Booking Fee", type: "liability" },
+      { code: "301.01", name: "Modal Saham Disetor", type: "equity" },
+      { code: "401.01", name: "Pendapatan Penjualan Unit Properti", type: "income" },
+      { code: "501.01", name: "Beban Pokok Penjualan (HPP)", type: "expense" },
+      { code: "503.01", name: "Beban Gaji & Tunjangan", type: "expense" },
+    ];
+    await prisma.erpAccount.createMany({
+      data: standardCOA.map((a) => ({ ...a, tenantId: tenant.id })),
+    });
+  }
+
+  // --- END ERP DEMO ACCOUNTS ---
+  const pricingPlans = [
+    {
+      name: "Starter (30 Days)",
+      durationDays: 30,
+      price: new Prisma.Decimal(500000),
+      description: "Ideal for testing and small operations.",
+    },
+    {
+      name: "Professional (180 Days)",
+      durationDays: 180,
+      price: new Prisma.Decimal(2500000),
+      description: "Best for growing development companies.",
+    },
+    {
+      name: "Enterprise (1 Year)",
+      durationDays: 365,
+      price: new Prisma.Decimal(5000000),
+      description: "Full enterprise access for large scale operations.",
+    },
+  ];
+
+  for (const plan of pricingPlans) {
+    await prisma.pricingPlan.upsert({
+      where: { id: `plan-${slugify(plan.name)}` },
+      update: plan,
+      create: {
+        id: `plan-${slugify(plan.name)}`,
+        ...plan,
+        ownerType: "SYSTEM",
+      },
+    });
+  }
+
+  // --- END ERP DEMO ACCOUNTS ---
+
   await upsertDemoUser({
     email: "public@livinova.local",
     password: "Public12345!",
@@ -240,18 +451,29 @@ async function main() {
     bankBySlug.set(bank.slug, { id: bank.id, isSharia: bank.isSharia });
   }
 
+  const sourceCheckedAt = new Date("2026-03-24T00:00:00.000Z");
+
   const products = [
     {
       bankSlug: "bca",
-      name: "KPR Fix & Cap",
-      defaultInterestRate: new Prisma.Decimal("8.250"),
-      promoInterestRate: new Prisma.Decimal("6.750"),
-      fixedPeriodMonths: 36,
+      name: "KPR BCA Fixed Berjenjang 10Y (s.d. 31 Mar 2026)",
+      minTenorMonths: 120,
+      rateSchedule: [
+        { months: 12, ratePercent: 2.9, kind: "fixed" },
+        { months: 24, ratePercent: 5.99, kind: "fixed" },
+        { months: 36, ratePercent: 7.99, kind: "fixed" },
+        { months: 48, ratePercent: 9.99, kind: "fixed" },
+      ],
       floatingRateAssumption: new Prisma.Decimal("11.000"),
       adminFee: new Prisma.Decimal(1500000),
       insuranceRate: new Prisma.Decimal("0.350"),
       provisiRate: new Prisma.Decimal("1.000"),
       notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://rumahsaya.bca.co.id/id/info-kpr/bunga-kpr-spesial",
+      sourceTitle: "Rumahsaya BCA - Bunga KPR Spesial",
+      sourceCheckedAt,
+      notes:
+        "Bunga fixed berjenjang efektif p.a. berlaku s.d. 31 Maret 2026. Floating setelah periode promo mengikuti ketentuan bank; floatingRateAssumption dipakai sebagai asumsi simulasi.",
     },
     {
       bankSlug: "bri",
@@ -267,47 +489,295 @@ async function main() {
     },
     {
       bankSlug: "bni",
-      name: "BNI Griya",
-      defaultInterestRate: new Prisma.Decimal("8.500"),
-      promoInterestRate: new Prisma.Decimal("6.990"),
-      fixedPeriodMonths: 24,
-      floatingRateAssumption: new Prisma.Decimal("11.250"),
+      name: "BNI Griya Single Fixed 1Y (Kategori B)",
+      minTenorMonths: 12,
+      defaultInterestRate: new Prisma.Decimal("7.250"),
+      promoInterestRate: new Prisma.Decimal("7.250"),
+      fixedPeriodMonths: 12,
+      floatingRateAssumption: new Prisma.Decimal("10.750"),
       adminFee: new Prisma.Decimal(1250000),
       insuranceRate: new Prisma.Decimal("0.380"),
       provisiRate: new Prisma.Decimal("1.000"),
       notaryFeeEstimate: new Prisma.Decimal(7800000),
+      sourceUrl: "https://www.bni.co.id/id-id/individu/pinjaman/bni-griya",
+      sourceTitle: "BNI Griya - Suku Bunga 2026",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel Suku Bunga 2026 (Kategori B: pembelian di developer kerjasama & non-primary). Setelah periode fixed berakhir berlaku bunga floating sesuai ketentuan bank.",
+    },
+    {
+      bankSlug: "bni",
+      name: "BNI Griya Fixed Berjenjang 10Y (Kategori B)",
+      minTenorMonths: 120,
+      rateSchedule: [
+        { months: 12, ratePercent: 3.75, kind: "fixed_step" },
+        { months: 24, ratePercent: 5.75, kind: "fixed_step" },
+        { months: 12, ratePercent: 8.75, kind: "fixed_step" },
+        { months: 72, ratePercent: 10.75, kind: "fixed_step" },
+      ],
+      floatingRateAssumption: new Prisma.Decimal("10.750"),
+      adminFee: new Prisma.Decimal(1250000),
+      insuranceRate: new Prisma.Decimal("0.380"),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(7800000),
+      sourceUrl: "https://www.bni.co.id/id-id/individu/pinjaman/bni-griya",
+      sourceTitle: "BNI Griya - Suku Bunga 2026",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel Fixed Berjenjang (Kategori B). Jika tenor melebihi 10 tahun, sisa tenor menggunakan asumsi floatingRateAssumption.",
     },
     {
       bankSlug: "btn",
-      name: "BTN Properti",
-      defaultInterestRate: new Prisma.Decimal("8.990"),
-      promoInterestRate: new Prisma.Decimal("7.490"),
-      fixedPeriodMonths: 24,
-      floatingRateAssumption: new Prisma.Decimal("11.750"),
-      adminFee: new Prisma.Decimal(900000),
+      name: "BTN Platinum FR 1Y",
+      defaultInterestRate: new Prisma.Decimal("9.000"),
+      promoInterestRate: new Prisma.Decimal("4.500"),
+      fixedPeriodMonths: 12,
+      minTenorMonths: 96,
+      floatingRateAssumption: new Prisma.Decimal("12.990"),
+      adminFee: new Prisma.Decimal(500000),
       insuranceRate: new Prisma.Decimal("0.420"),
-      provisiRate: new Prisma.Decimal("1.000"),
+      provisiRate: new Prisma.Decimal("0.200"),
       notaryFeeEstimate: new Prisma.Decimal(7200000),
+      sourceUrl:
+        "https://www.btn.co.id/id/Individual/Kredit-Konsumer/Produk-Kredit/KPR-BTN-Platinum",
+      sourceTitle: "BTN - KPR BTN Platinum",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel Promo Reguler (Fix Rate FR 1 Thn, min tenor 8 tahun) berlaku 1 Maret 2026 s.d. 30 Juni 2026. Setelah promo berakhir terdapat kenaikan berjenjang sebelum floating (GPM) dan/atau floating sesuai ketentuan BTN.",
+    },
+    {
+      bankSlug: "btn",
+      name: "BTN Platinum FR 3Y",
+      defaultInterestRate: new Prisma.Decimal("10.000"),
+      promoInterestRate: new Prisma.Decimal("6.250"),
+      fixedPeriodMonths: 36,
+      minTenorMonths: 144,
+      floatingRateAssumption: new Prisma.Decimal("12.990"),
+      adminFee: new Prisma.Decimal(500000),
+      insuranceRate: new Prisma.Decimal("0.420"),
+      provisiRate: new Prisma.Decimal("0.200"),
+      notaryFeeEstimate: new Prisma.Decimal(7200000),
+      sourceUrl:
+        "https://www.btn.co.id/id/Individual/Kredit-Konsumer/Produk-Kredit/KPR-BTN-Platinum",
+      sourceTitle: "BTN - KPR BTN Platinum",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel Promo Reguler (Fix Rate FR 3 Thn, min tenor 12 tahun) berlaku 1 Maret 2026 s.d. 30 Juni 2026. Setelah promo berakhir terdapat kenaikan berjenjang sebelum floating (GPM) dan/atau floating sesuai ketentuan BTN.",
+    },
+    {
+      bankSlug: "btn",
+      name: "BTN Platinum FR 5Y",
+      defaultInterestRate: new Prisma.Decimal("10.250"),
+      promoInterestRate: new Prisma.Decimal("7.500"),
+      fixedPeriodMonths: 60,
+      minTenorMonths: 180,
+      floatingRateAssumption: new Prisma.Decimal("12.990"),
+      adminFee: new Prisma.Decimal(500000),
+      insuranceRate: new Prisma.Decimal("0.420"),
+      provisiRate: new Prisma.Decimal("0.200"),
+      notaryFeeEstimate: new Prisma.Decimal(7200000),
+      sourceUrl:
+        "https://www.btn.co.id/id/Individual/Kredit-Konsumer/Produk-Kredit/KPR-BTN-Platinum",
+      sourceTitle: "BTN - KPR BTN Platinum",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel Promo Reguler (Fix Rate FR 5 Thn, min tenor 15 tahun) berlaku 1 Maret 2026 s.d. 30 Juni 2026. Setelah promo berakhir terdapat kenaikan berjenjang sebelum floating (GPM) dan/atau floating sesuai ketentuan BTN.",
+    },
+    {
+      bankSlug: "btn",
+      name: "BTN Platinum Fix n Cap 18Y (Promo Reguler)",
+      minTenorMonths: 216,
+      rateSchedule: [
+        { months: 36, ratePercent: 6.5, kind: "fixed_cap" },
+        { months: 36, ratePercent: 9.25, kind: "fixed_cap" },
+        { months: 48, ratePercent: 12.0, kind: "fixed_cap" },
+        { months: 96, ratePercent: 12.99, kind: "fixed_cap" },
+      ],
+      floatingRateAssumption: new Prisma.Decimal("12.990"),
+      adminFee: new Prisma.Decimal(500000),
+      insuranceRate: new Prisma.Decimal("0.420"),
+      provisiRate: new Prisma.Decimal("0.200"),
+      notaryFeeEstimate: new Prisma.Decimal(7200000),
+      sourceUrl:
+        "https://www.btn.co.id/id/Individual/Kredit-Konsumer/Produk-Kredit/KPR-BTN-Platinum",
+      sourceTitle: "BTN - KPR BTN Platinum",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel Promo Reguler Fix n Cap (Thn 1-3, 4-6, 7-10, 11-18) berlaku 1 Maret 2026 s.d. 30 Juni 2026. Setelah masa Fix n Cap berakhir berlaku suku bunga floating sesuai ketentuan BTN.",
     },
     {
       bankSlug: "mandiri",
-      name: "Mandiri KPR",
-      defaultInterestRate: new Prisma.Decimal("8.650"),
-      promoInterestRate: new Prisma.Decimal("7.150"),
-      fixedPeriodMonths: 36,
-      floatingRateAssumption: new Prisma.Decimal("11.300"),
+      name: "Mandiri KPR Fixed Berjenjang 10Y (min tenor 15Y)",
+      minTenorMonths: 180,
+      rateSchedule: [
+        { months: 36, ratePercent: 3.96, kind: "fixed_step" },
+        { months: 36, ratePercent: 8.66, kind: "fixed_step" },
+        { months: 48, ratePercent: 9.66, kind: "fixed_step" },
+      ],
+      floatingRateAssumption: new Prisma.Decimal("11.500"),
       adminFee: new Prisma.Decimal(1750000),
       insuranceRate: new Prisma.Decimal("0.360"),
       provisiRate: new Prisma.Decimal("1.000"),
       notaryFeeEstimate: new Prisma.Decimal(8200000),
+      sourceUrl: "https://www.bankmandiri.co.id/en/kpr-bunga-fixed-berjenjang",
+      sourceTitle: "Mandiri KPR - Bunga Fixed Berjenjang 10 Tahun Spesial 2026",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel suku bunga fixed berjenjang 10 tahun spesial 2026 (berlaku s.d. pencairan 31 Maret 2026). Jika tenor > 10 tahun, sisa tenor menggunakan floatingRateAssumption sebagai asumsi simulasi.",
+    },
+    {
+      bankSlug: "mandiri",
+      name: "Mandiri KPR Fixed Berjenjang 10Y (min tenor 12Y)",
+      minTenorMonths: 144,
+      rateSchedule: [
+        { months: 36, ratePercent: 4.86, kind: "fixed_step" },
+        { months: 36, ratePercent: 8.86, kind: "fixed_step" },
+        { months: 48, ratePercent: 9.86, kind: "fixed_step" },
+      ],
+      floatingRateAssumption: new Prisma.Decimal("11.500"),
+      adminFee: new Prisma.Decimal(1750000),
+      insuranceRate: new Prisma.Decimal("0.360"),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8200000),
+      sourceUrl: "https://www.bankmandiri.co.id/en/kpr-bunga-fixed-berjenjang",
+      sourceTitle: "Mandiri KPR - Bunga Fixed Berjenjang 10 Tahun Spesial 2026",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel suku bunga fixed berjenjang 10 tahun spesial 2026 (berlaku s.d. pencairan 31 Maret 2026). Jika tenor > 10 tahun, sisa tenor menggunakan floatingRateAssumption sebagai asumsi simulasi.",
     },
     {
       bankSlug: "bsi-syariah",
-      name: "BSI Griya Hasanah",
-      shariaMargin: new Prisma.Decimal("9.500"),
+      name: "BSI Griya (Single Pricing - Payroll)",
+      shariaMargin: new Prisma.Decimal("8.500"),
       adminFee: new Prisma.Decimal(1250000),
       provisiRate: new Prisma.Decimal("1.000"),
       notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel promo (single pricing payroll). Margin/ujrah mengikuti ketentuan produk pada saat akad; angka ini adalah pricing promo yang dipublikasikan.",
+    },
+    {
+      bankSlug: "bsi-syariah",
+      name: "BSI Griya (Single Pricing - Non Payroll)",
+      shariaMargin: new Prisma.Decimal("8.750"),
+      adminFee: new Prisma.Decimal(1250000),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu tabel promo (single pricing non payroll). Margin/ujrah mengikuti ketentuan produk pada saat akad; angka ini adalah pricing promo yang dipublikasikan.",
+    },
+    {
+      bankSlug: "bsi-syariah",
+      name: "BSI Griya Step Up 1Y (Payroll, tenor 15Y)",
+      minTenorMonths: 180,
+      shariaMargin: new Prisma.Decimal("8.500"),
+      rateSchedule: [
+        { months: 12, ratePercent: 3.0, kind: "sharia_step" },
+        { months: 168, ratePercent: 8.5, kind: "sharia_single" },
+      ],
+      adminFee: new Prisma.Decimal(1250000),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu pricing step up payroll: 3.00% fix 1 tahun tenor 15 tahun. Setelah periode step up, simulasi memakai pricing single payroll sebagai asumsi.",
+    },
+    {
+      bankSlug: "bsi-syariah",
+      name: "BSI Griya Step Up 3Y (Payroll, tenor 15Y)",
+      minTenorMonths: 180,
+      shariaMargin: new Prisma.Decimal("8.500"),
+      rateSchedule: [
+        { months: 36, ratePercent: 4.3, kind: "sharia_step" },
+        { months: 144, ratePercent: 8.5, kind: "sharia_single" },
+      ],
+      adminFee: new Prisma.Decimal(1250000),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu pricing step up payroll: 4.30% fix 3 tahun tenor 15 tahun. Setelah periode step up, simulasi memakai pricing single payroll sebagai asumsi.",
+    },
+    {
+      bankSlug: "bsi-syariah",
+      name: "BSI Griya Step Up 2Y (Payroll, tenor 10Y)",
+      minTenorMonths: 120,
+      shariaMargin: new Prisma.Decimal("8.500"),
+      rateSchedule: [
+        { months: 24, ratePercent: 5.3, kind: "sharia_step" },
+        { months: 96, ratePercent: 8.5, kind: "sharia_single" },
+      ],
+      adminFee: new Prisma.Decimal(1250000),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu pricing step up payroll: 5.30% fix 2 tahun tenor 10 tahun. Setelah periode step up, simulasi memakai pricing single payroll sebagai asumsi.",
+    },
+    {
+      bankSlug: "bsi-syariah",
+      name: "BSI Griya Step Up 1Y (Non Payroll, tenor 15Y)",
+      minTenorMonths: 180,
+      shariaMargin: new Prisma.Decimal("8.750"),
+      rateSchedule: [
+        { months: 12, ratePercent: 3.1, kind: "sharia_step" },
+        { months: 168, ratePercent: 8.75, kind: "sharia_single" },
+      ],
+      adminFee: new Prisma.Decimal(1250000),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu pricing step up non payroll: 3.10% fix 1 tahun tenor 15 tahun. Setelah periode step up, simulasi memakai pricing single non payroll sebagai asumsi.",
+    },
+    {
+      bankSlug: "bsi-syariah",
+      name: "BSI Griya Step Up 3Y (Non Payroll, tenor 15Y)",
+      minTenorMonths: 180,
+      shariaMargin: new Prisma.Decimal("8.750"),
+      rateSchedule: [
+        { months: 36, ratePercent: 4.5, kind: "sharia_step" },
+        { months: 144, ratePercent: 8.75, kind: "sharia_single" },
+      ],
+      adminFee: new Prisma.Decimal(1250000),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu pricing step up non payroll: 4.50% fix 3 tahun tenor 15 tahun. Setelah periode step up, simulasi memakai pricing single non payroll sebagai asumsi.",
+    },
+    {
+      bankSlug: "bsi-syariah",
+      name: "BSI Griya Step Up 2Y (Non Payroll, tenor 10Y)",
+      minTenorMonths: 120,
+      shariaMargin: new Prisma.Decimal("8.750"),
+      rateSchedule: [
+        { months: 24, ratePercent: 5.3, kind: "sharia_step" },
+        { months: 96, ratePercent: 8.75, kind: "sharia_single" },
+      ],
+      adminFee: new Prisma.Decimal(1250000),
+      provisiRate: new Prisma.Decimal("1.000"),
+      notaryFeeEstimate: new Prisma.Decimal(8000000),
+      sourceUrl: "https://www.bankbsi.co.id/promo/bsi-griya-spesial-margin",
+      sourceTitle: "BSI - Promo BSI Griya Spesial Margin",
+      sourceCheckedAt,
+      notes:
+        "Mengacu pricing step up non payroll: 5.30% fix 2 tahun tenor 10 tahun. Setelah periode step up, simulasi memakai pricing single non payroll sebagai asumsi.",
     },
     {
       bankSlug: "panin-bank",
@@ -415,6 +885,9 @@ async function main() {
         defaultInterestRate: "defaultInterestRate" in p ? (p.defaultInterestRate ?? null) : null,
         promoInterestRate: "promoInterestRate" in p ? (p.promoInterestRate ?? null) : null,
         fixedPeriodMonths: "fixedPeriodMonths" in p ? (p.fixedPeriodMonths ?? null) : null,
+        minTenorMonths: "minTenorMonths" in p ? (p.minTenorMonths ?? null) : null,
+        rateSchedule:
+          "rateSchedule" in p ? (p.rateSchedule as Prisma.InputJsonValue) : Prisma.JsonNull,
         floatingRateAssumption:
           "floatingRateAssumption" in p ? (p.floatingRateAssumption ?? null) : null,
         shariaMargin: "shariaMargin" in p ? (p.shariaMargin ?? null) : null,
@@ -422,6 +895,10 @@ async function main() {
         insuranceRate: "insuranceRate" in p ? (p.insuranceRate ?? null) : null,
         provisiRate: p.provisiRate ?? null,
         notaryFeeEstimate: p.notaryFeeEstimate ?? null,
+        sourceUrl: "sourceUrl" in p ? (p.sourceUrl ?? null) : null,
+        sourceTitle: "sourceTitle" in p ? (p.sourceTitle ?? null) : null,
+        sourceCheckedAt: "sourceCheckedAt" in p ? (p.sourceCheckedAt ?? null) : null,
+        notes: "notes" in p ? (p.notes ?? null) : null,
       },
       create: {
         bankId: bank.id,
@@ -431,6 +908,9 @@ async function main() {
         defaultInterestRate: "defaultInterestRate" in p ? (p.defaultInterestRate ?? null) : null,
         promoInterestRate: "promoInterestRate" in p ? (p.promoInterestRate ?? null) : null,
         fixedPeriodMonths: "fixedPeriodMonths" in p ? (p.fixedPeriodMonths ?? null) : null,
+        minTenorMonths: "minTenorMonths" in p ? (p.minTenorMonths ?? null) : null,
+        rateSchedule:
+          "rateSchedule" in p ? (p.rateSchedule as Prisma.InputJsonValue) : Prisma.JsonNull,
         floatingRateAssumption:
           "floatingRateAssumption" in p ? (p.floatingRateAssumption ?? null) : null,
         shariaMargin: "shariaMargin" in p ? (p.shariaMargin ?? null) : null,
@@ -438,6 +918,10 @@ async function main() {
         insuranceRate: "insuranceRate" in p ? (p.insuranceRate ?? null) : null,
         provisiRate: p.provisiRate ?? null,
         notaryFeeEstimate: p.notaryFeeEstimate ?? null,
+        sourceUrl: "sourceUrl" in p ? (p.sourceUrl ?? null) : null,
+        sourceTitle: "sourceTitle" in p ? (p.sourceTitle ?? null) : null,
+        sourceCheckedAt: "sourceCheckedAt" in p ? (p.sourceCheckedAt ?? null) : null,
+        notes: "notes" in p ? (p.notes ?? null) : null,
       },
     });
   }

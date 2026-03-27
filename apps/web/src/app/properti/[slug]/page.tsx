@@ -30,6 +30,7 @@ import {
 import { Container } from "@/components/site/container";
 import { PropertyMediaGallery } from "@/components/listings/property-media-gallery";
 import { Property3DPreview } from "@/components/listings/property-3d-preview";
+import { PropertyRating } from "@/components/listings/property-rating";
 import { ShareButton } from "@/components/listings/share-button";
 import { WishlistButton } from "@/components/listings/wishlist-button";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { apiFetch } from "@/lib/api";
 import { formatRupiah } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { Star } from "lucide-react";
 
 type ListingDetail = {
   id: string;
@@ -82,6 +85,15 @@ type ListingDetail = {
   };
   images: Array<{ id: string; url: string; kind: string; sortOrder: number }>;
   smartFeatures: Array<{ id: string; name: string; slug: string; category: string }>;
+  averageRating: number;
+  ratingCount: number;
+  ratings: Array<{
+    id: string;
+    rating: number;
+    name: string;
+    comment: string | null;
+    createdAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -502,6 +514,25 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             <h1 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
               {listing.project.name}
             </h1>
+            {listing.ratingCount > 0 && (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex items-center gap-0.5">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      className={cn(
+                        "h-4 w-4",
+                        s <= Math.round(listing.averageRating)
+                          ? "fill-amber-400 text-amber-400"
+                          : "fill-slate-100 text-slate-200"
+                      )}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm font-bold text-slate-900">{listing.averageRating.toFixed(1)}</span>
+                <span className="text-sm text-slate-500">({listing.ratingCount} Ulasan)</span>
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
               <span className="font-semibold text-slate-900">{listing.project.developer.name}</span>
               {listing.project.developer.verificationStatus === "approved" ? (
@@ -811,6 +842,20 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                       Tergantung produk bank yang aktif di sistem. Gunakan halaman Simulasi KPR untuk melihat opsi produk syariah.
                     </div>
                   </details>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle>Rating & Ulasan Penghuni</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <PropertyRating
+                    listingId={listing.id}
+                    averageRating={listing.averageRating}
+                    ratingCount={listing.ratingCount}
+                    ratings={listing.ratings}
+                  />
                 </CardContent>
               </Card>
             </div>

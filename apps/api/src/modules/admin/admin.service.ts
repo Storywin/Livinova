@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import {
   ListingStatus,
   Prisma,
+  ProjectStatus,
   VerificationEntityType,
   VerificationOutcome,
   VerificationStatus,
@@ -256,5 +257,82 @@ export class AdminService {
     });
 
     return listing;
+  }
+
+  async listProjectsForReview(input: {
+    page: number;
+    pageSize: number;
+    status?: ProjectStatus;
+    verificationStatus?: VerificationStatus;
+  }) {
+    const skip = (input.page - 1) * input.pageSize;
+    const where: Prisma.ProjectWhereInput = {
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.verificationStatus ? { verificationStatus: input.verificationStatus } : {}),
+    };
+
+    const [totalItems, items] = await Promise.all([
+      this.prisma.project.count({ where }),
+      this.prisma.project.findMany({
+        where,
+        skip,
+        take: input.pageSize,
+        orderBy: { createdAt: "desc" },
+        include: { developer: true, location: true },
+      }),
+    ]);
+
+    return {
+      page: input.page,
+      pageSize: input.pageSize,
+      totalItems,
+      totalPages: Math.max(1, Math.ceil(totalItems / input.pageSize)),
+      items,
+    };
+  }
+
+  async reviewProject(input: {
+    projectId: string;
+    reviewerId: string;
+    outcome: VerificationOutcome;
+    notes?: string;
+  }) {
+    const project = await this.prisma.project.update({
+      where: { id: input.projectId },
+      data: {
+        verificationStatus:
+          input.outcome === "approved"
+            ? VerificationStatus.approved
+            : input.outcome === "rejected"
+              ? VerificationStatus.rejected
+              : VerificationStatus.revision_requested,
+      },
+      include: { developer: true },
+    });
+
+    await this.prisma.verificationRecord.create({
+      data: {
+        entityType: VerificationEntityType.project,
+        entityId: project.id,
+        reviewerId: input.reviewerId,
+        outcome: input.outcome,
+        notes: input.notes ?? null,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: input.reviewerId,
+        action: "project.review",
+        entityType: "Project",
+        entityId: project.id,
+        metadata: {
+          outcome: input.outcome,
+          nextVerificationStatus: project.verificationStatus,
+        } as any,
+      },
+    });
+
+    return project;
   }
 }

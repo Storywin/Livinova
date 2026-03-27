@@ -20,6 +20,13 @@ type ArticleDetail = {
   metaDescription: string | null;
 };
 
+type SeoSettings = {
+  siteName: string;
+  titleTemplate: string;
+  defaultMetaDescription: string | null;
+  googleSiteVerification: string | null;
+};
+
 function getSiteUrl() {
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.SITE_URL;
   return envUrl && envUrl.trim() ? envUrl.trim().replace(/\/$/, "") : "http://localhost:3000";
@@ -27,6 +34,17 @@ function getSiteUrl() {
 
 async function getArticle(slug: string) {
   return apiFetch<ArticleDetail | null>(`/public/articles/${slug}`);
+}
+
+async function getSeoSettings() {
+  return apiFetch<SeoSettings>(`/public/seo`);
+}
+
+function applyTitleTemplate(template: string, title: string) {
+  const t = template?.trim();
+  if (!t) return title;
+  if (t.includes("%s")) return t.replaceAll("%s", title);
+  return `${title} | ${t}`;
 }
 
 function isAbsoluteUrl(url: string) {
@@ -199,13 +217,24 @@ function parseContent(body: string): { nodes: ContentNode[]; toc: Array<{ id: st
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   let article: ArticleDetail | null = null;
+  let seo: SeoSettings | null = null;
   try {
     article = await getArticle(slug);
   } catch {
     article = null;
   }
-  const title = article?.metaTitle ?? article?.title ?? "Artikel";
-  const description = article?.metaDescription ?? article?.excerpt ?? "Artikel Livinova";
+  try {
+    seo = await getSeoSettings();
+  } catch {
+    seo = null;
+  }
+  const baseTitle = article?.metaTitle ?? article?.title ?? "Artikel";
+  const title = seo ? applyTitleTemplate(seo.titleTemplate, baseTitle) : baseTitle;
+  const description =
+    article?.metaDescription ??
+    article?.excerpt ??
+    seo?.defaultMetaDescription ??
+    "Artikel Livinova";
   const canonical = `/artikel/${slug}`;
   return {
     title,

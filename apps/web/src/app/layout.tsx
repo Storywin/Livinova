@@ -7,6 +7,7 @@ import { SiteHeader } from "@/components/site/site-header";
 
 import "./globals.css";
 import { Providers } from "./providers";
+import { SiteLayoutWrapper } from "@/components/site/site-layout-wrapper";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -33,9 +34,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="id" className={inter.variable}>
       <body className="min-h-dvh bg-slate-50 text-slate-950">
         <Providers>
-          <SiteHeader />
-          {children}
-          <SiteFooter />
+          <SiteLayoutWrapper>
+            {children}
+          </SiteLayoutWrapper>
         </Providers>
       </body>
     </html>

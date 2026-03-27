@@ -14,6 +14,14 @@ export function AdminOnly() {
   );
 }
 
+export function AdminOrVerifier() {
+  return applyDecorators(
+    ApiBearerAuth(),
+    UseGuards(JwtAuthGuard, RolesGuard),
+    Roles(RoleName.admin, RoleName.super_admin, RoleName.verifier),
+  );
+}
+
 export function SuperAdminOnly() {
   return applyDecorators(
     ApiBearerAuth(),
