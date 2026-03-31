@@ -1518,6 +1518,13 @@ export default function ErpDashboard() {
     setIsModalOpen(true);
   };
 
+  const openSalesForCustomer = (customerId: string) => {
+    resetForms();
+    setSalesData({ projectId: "", unitId: "", customerId, totalPrice: 0 });
+    setModalType("sales");
+    setIsModalOpen(true);
+  };
+
   const addJournalRow = () => {
     setJournalData({
       ...journalData,
@@ -4644,8 +4651,16 @@ export default function ErpDashboard() {
                           </div>
                         </div>
                         {customerDetail && (
-                          <div className="px-4 py-2 rounded-2xl bg-white border border-slate-200 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 shadow-sm">
-                            ID: {customerDetail.id.slice(0, 8).toUpperCase()}
+                          <div className="flex flex-col items-end gap-3">
+                            <div className="px-4 py-2 rounded-2xl bg-white border border-slate-200 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 shadow-sm">
+                              ID: {customerDetail.id.slice(0, 8).toUpperCase()}
+                            </div>
+                            <Button
+                              onClick={() => openSalesForCustomer(customerDetail.id)}
+                              className="h-11 rounded-2xl bg-blue-600 text-white font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 px-6"
+                            >
+                              Buat Penjualan
+                            </Button>
                           </div>
                         )}
                       </div>
