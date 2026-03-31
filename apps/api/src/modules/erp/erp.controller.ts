@@ -9,7 +9,10 @@ import {
   Patch,
   Delete,
   BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type {
   ErpEmployeeStatus,
   ErpLeadActivityType,
@@ -24,6 +27,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 
 import { ErpService } from "./erp.service";
+import { erpProjectImageStorage } from "./upload";
 
 type RequestWithContext = {
   user: unknown;
@@ -301,6 +305,17 @@ export class ErpController {
     @Body() body: Prisma.ErpProjectCreateInput,
   ) {
     return this.erpService.createProject(requireTenantId(req), body);
+  }
+
+  @Post("projects/:projectId/hero")
+  @Roles("tenant_admin")
+  @UseInterceptors(FileInterceptor("file", { storage: erpProjectImageStorage }))
+  async uploadProjectHero(
+    @Request() req: RequestWithContext,
+    @Param("projectId") projectId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.erpService.uploadProjectHero(requireTenantId(req), projectId, file);
   }
 
   @Post("projects/:projectId/units")
@@ -656,6 +671,12 @@ export class ErpController {
   }
 
   // --- Sales ---
+  @Get("sales/:id")
+  @Roles("erp_user", "tenant_admin")
+  async getSale(@Request() req: RequestWithContext, @Param("id") id: string) {
+    return this.erpService.getSale(requireTenantId(req), id);
+  }
+
   @Post("sales")
   @Roles("erp_user", "tenant_admin")
   async createSales(

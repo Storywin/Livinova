@@ -186,9 +186,11 @@ model ErpProject {
   name                     String
   description              String?
   revenueRecognitionMethod ErpRevenueRecognition @default(point_in_time)
+  heroMediaAssetId         String?
   createdAt                DateTime              @default(now())
   updatedAt                DateTime              @updatedAt
   tenant                   Tenant                @relation(fields: [tenantId], references: [id])
+  heroMediaAsset           MediaAsset?           @relation("ErpProjectHero", fields: [heroMediaAssetId], references: [id])
   leads                    ErpLead[]
   purchaseOrders           ErpPurchaseOrder[]
   vendorBills              ErpVendorBill[]
@@ -1192,6 +1194,7 @@ model MediaAsset {
   createdAt          DateTime            @default(now())
   developerDocuments DeveloperDocument[]
   propertyImages     PropertyImage[]
+  erpProjectHeros    ErpProject[]        @relation("ErpProjectHero")
   brochureListings   PropertyListing[]   @relation("BrochureAsset")
 
   @@index([kind])

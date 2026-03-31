@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { RequireErp } from "@/components/erp/require-erp";
 import { Card } from "@/components/ui/card";
 import { 
@@ -14,6 +15,7 @@ import {
   FileText, 
   Settings,
   Plus,
+  ImagePlus,
   Search,
   ChevronRight,
   TrendingUp,
@@ -36,6 +38,7 @@ import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { apiFetchWithAuth } from "@/lib/api-auth";
 import { formatRupiah } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -107,12 +110,14 @@ type InventoryProject = {
   id: string;
   name: string;
   description?: string | null;
+  heroMediaAsset?: { id: string; url: string } | null;
   units: Array<{
     id: string;
     unitCode: string;
     status: string;
     price: number;
     area?: number | null;
+    sales?: Array<{ id: string; status: string; createdAt: string }>;
   }>;
 };
 
@@ -163,6 +168,32 @@ type CustomerDetail = Customer & {
   createdAt: string;
   sales: CustomerSale[];
   leads: CustomerLead[];
+};
+
+type SalesDetail = {
+  id: string;
+  status: string;
+  totalPrice: string;
+  createdAt: string;
+  updatedAt: string;
+  handoverAt?: string | null;
+  customer: Customer;
+  project: { id: string; name: string };
+  unit: { id: string; unitCode: string };
+  payments: Array<{
+    id: string;
+    amount: string;
+    dueDate: string;
+    paidDate?: string | null;
+    status: string;
+  }>;
+  documents: Array<{
+    id: string;
+    content: string;
+    status: string;
+    createdAt: string;
+    template?: { id: string; name: string; type: string } | null;
+  }>;
 };
 
 type LeadStatus = "new" | "contacted" | "qualified" | "booked" | "lost";
@@ -407,6 +438,25 @@ function formatMonthIdLabel(monthId: string) {
   return date.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
 }
 
+function formatThousandsId(value: string) {
+  const digits = value.replace(/[^\d]/g, "");
+  if (!digits) return "0";
+  const normalized = digits.replace(/^0+/, "") || "0";
+  return normalized.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function formatAmountsInHtml(html: string) {
+  let out = html;
+  out = out.replace(/<\/h1>\s*<p>\s*(Nomor\s*:)/i, "</h1><div style=\"height:18px;\"></div><p>$1");
+  out = out.replace(/(<div style="font-size: 12px; color: #475569; margin-top: )(10|18)(px;")/g, "$126$3");
+  out = out.replace(/(Harga\s*:\s*)(Rp\s*)?(\d{4,})/gi, (_m, p1: string, p2: string | undefined, p3: string) => {
+    const rp = p2 || "";
+    return `${p1}${rp}${formatThousandsId(p3)}`;
+  });
+  out = out.replace(/(Rp\s*)(\d{4,})/g, (_m, p1: string, p2: string) => `${p1}${formatThousandsId(p2)}`);
+  return out;
+}
+
 function getErrorMessage(error: unknown, fallback = "Terjadi kesalahan") {
   if (error && typeof error === "object" && "message" in error) {
     const message = (error as { message?: unknown }).message;
@@ -435,6 +485,7 @@ export default function ErpDashboard() {
   const [modalType, setModalType] = useState<
     | "project"
     | "sales"
+    | "sale-detail"
     | "journal"
     | "customer"
     | "customer-list"
@@ -463,9 +514,11 @@ export default function ErpDashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedSalesId, setSelectedSalesId] = useState<string | null>(null);
   const [isProjectDetailMode, setIsProjectDetailOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string } | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
+  const previewDocHtml = useMemo(() => (previewDoc ? formatAmountsInHtml(previewDoc.content) : ""), [previewDoc]);
   
   // Form States
   const [projectData, setProjectData] = useState({ name: "", description: "" });
@@ -569,6 +622,8 @@ export default function ErpDashboard() {
   const [paymentMethodDraft, setPaymentMethodDraft] = useState<PaymentMethodId>("VA_MANDIRI");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const projectImageInputRef = useRef<HTMLInputElement>(null);
+  const [projectImageTargetId, setProjectImageTargetId] = useState<string | null>(null);
   const [journalData, setJournalData] = useState({ 
     date: new Date().toISOString().split('T')[0], 
     description: "",
@@ -689,6 +744,12 @@ export default function ErpDashboard() {
     enabled: modalType === "customer-detail" && !!selectedCustomerId,
   });
 
+  const { data: saleDetail, isLoading: isSaleDetailLoading } = useQuery({
+    queryKey: ["erp-sale", selectedSalesId],
+    queryFn: () => apiFetch<SalesDetail>(`/api/erp/sales/${selectedSalesId}`),
+    enabled: modalType === "sale-detail" && !!selectedSalesId,
+  });
+
   const { data: leads, refetch: refetchLeads } = useQuery({
     queryKey: ["erp-leads"],
     queryFn: () => apiFetch<Lead[]>("/api/erp/leads"),
@@ -752,6 +813,24 @@ export default function ErpDashboard() {
     onError: (err: unknown) => {
       toast.error(getErrorMessage(err, "Gagal menambahkan proyek"));
     }
+  });
+
+  const uploadProjectHero = useMutation({
+    mutationFn: async (input: { projectId: string; file: File }) => {
+      const fd = new FormData();
+      fd.append("file", input.file);
+      return apiFetchWithAuth<{ ok: boolean; url: string; mediaAssetId: string }>(
+        `/api/erp/projects/${input.projectId}/hero`,
+        { method: "POST", body: fd },
+      );
+    },
+    onSuccess: async () => {
+      toast.success("Foto proyek berhasil diperbarui");
+      await queryClient.invalidateQueries({ queryKey: ["erp-projects"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(getErrorMessage(err, "Gagal upload foto proyek"));
+    },
   });
 
   const createUnit = useMutation({
@@ -1376,6 +1455,7 @@ export default function ErpDashboard() {
     setLeadData({ name: "", email: "", phone: "", source: "manual", projectId: "", notes: "" });
     setSelectedLeadId(null);
     setSelectedCustomerId(null);
+    setSelectedSalesId(null);
     setCustomerSearch("");
     setLeadActivityData({ type: "whatsapp", notes: "", nextFollowUpAt: "" });
     setSelectedBillId(null);
@@ -1469,6 +1549,7 @@ export default function ErpDashboard() {
     type:
       | "project"
       | "sales"
+      | "sale-detail"
       | "journal"
       | "customer"
       | "customer-list"
@@ -1522,6 +1603,13 @@ export default function ErpDashboard() {
     resetForms();
     setSalesData({ projectId: "", unitId: "", customerId, totalPrice: 0 });
     setModalType("sales");
+    setIsModalOpen(true);
+  };
+
+  const openSaleDetailModal = (salesId: string) => {
+    resetForms();
+    setSelectedSalesId(salesId);
+    setModalType("sale-detail");
     setIsModalOpen(true);
   };
 
@@ -1595,7 +1683,7 @@ export default function ErpDashboard() {
   const menuItems = useMemo(() => {
     const allItems = [
       { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" />, group: "Main Menu", roles: ["tenant_admin", "erp_user"] },
-      { id: "projects", label: "Master Proyek", icon: <Map className="h-5 w-5" />, group: "Main Menu", roles: ["tenant_admin"] },
+      { id: "projects", label: "Master Proyek", icon: <Map className="h-5 w-5" />, group: "Main Menu", roles: ["tenant_admin", "erp_user"] },
       { id: "sales", label: "Penjualan (CRM)", icon: <ShoppingCart className="h-5 w-5" />, group: "Main Menu", roles: ["tenant_admin", "erp_user"] },
       { id: "finance", label: "Keuangan & Akun", icon: <Wallet className="h-5 w-5" />, group: "Backoffice", roles: ["tenant_admin"] },
       { id: "procurement", label: "Procurement & Vendor", icon: <Truck className="h-5 w-5" />, group: "Backoffice", roles: ["tenant_admin"] },
@@ -1614,7 +1702,6 @@ export default function ErpDashboard() {
     if (
       isSalesUser &&
       (activeTab === "finance" ||
-        activeTab === "projects" ||
         activeTab === "procurement" ||
         activeTab === "hr" ||
         activeTab === "construction")
@@ -2008,36 +2095,77 @@ export default function ErpDashboard() {
 
               {activeTab === "projects" && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
+                  <input
+                    ref={projectImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !projectImageTargetId) return;
+                      uploadProjectHero.mutate({ projectId: projectImageTargetId, file });
+                      setProjectImageTargetId(null);
+                      e.target.value = "";
+                    }}
+                  />
                   {!isProjectDetailMode ? (
                     <>
                       <div className="flex items-center justify-between mb-4">
                         <h2 className="text-3xl font-black text-slate-900 tracking-tight">Master <span className="text-blue-600">Proyek</span></h2>
-                        <div className="flex gap-3">
-                          <Button 
-                            onClick={() => openModal("unit")}
-                            variant="outline"
-                            className="rounded-2xl border-blue-200 text-blue-600 px-8 h-12 font-black hover:bg-blue-50"
-                          >
-                            <Plus className="mr-2 h-5 w-5" /> Tambah Unit
-                          </Button>
-                          <Button 
-                            onClick={() => openModal("project")}
-                            className="rounded-2xl bg-blue-600 px-8 h-12 font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 text-white"
-                          >
-                            <Plus className="mr-2 h-5 w-5" /> Tambah Proyek Baru
-                          </Button>
-                        </div>
+                        {isTenantAdmin && (
+                          <div className="flex gap-3">
+                            <Button 
+                              onClick={() => openModal("unit")}
+                              variant="outline"
+                              className="rounded-2xl border-blue-200 text-blue-600 px-8 h-12 font-black hover:bg-blue-50"
+                            >
+                              <Plus className="mr-2 h-5 w-5" /> Tambah Unit
+                            </Button>
+                            <Button 
+                              onClick={() => openModal("project")}
+                              className="rounded-2xl bg-blue-600 px-8 h-12 font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 text-white"
+                            >
+                              <Plus className="mr-2 h-5 w-5" /> Tambah Proyek Baru
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
                         {projects?.map((project) => (
                           <Card key={project.id} className="border-slate-100 bg-white rounded-[2rem] overflow-hidden group hover:shadow-2xl hover:border-blue-100 transition-all">
                             <div className="h-52 bg-slate-100 relative overflow-hidden">
+                              {project.heroMediaAsset?.url && (
+                                <Image
+                                  src={project.heroMediaAsset.url}
+                                  alt={project.name}
+                                  fill
+                                  sizes="(max-width: 1024px) 100vw, 33vw"
+                                  className="object-cover"
+                                />
+                              )}
                               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent"></div>
                               <div className="absolute bottom-6 left-6">
                                 <div className="text-[10px] font-black text-blue-300 uppercase tracking-[0.2em] mb-1">Residential</div>
                                 <h3 className="text-2xl font-black text-white tracking-tight">{project.name}</h3>
                               </div>
+                              {isTenantAdmin && (
+                                <div className="absolute top-6 left-6">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setProjectImageTargetId(project.id);
+                                      projectImageInputRef.current?.click();
+                                    }}
+                                    className="h-10 w-10 p-0 rounded-2xl bg-white/10 text-white hover:bg-white/20 border border-white/20 shadow-sm backdrop-blur"
+                                  >
+                                    <ImagePlus className="h-5 w-5" />
+                                  </Button>
+                                </div>
+                              )}
                               <div className="absolute top-6 right-6 bg-emerald-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-lg">ACTIVE</div>
                             </div>
                             <div className="p-8">
@@ -2063,44 +2191,101 @@ export default function ErpDashboard() {
                             </div>
                           </Card>
                         ))}
-                        <button 
-                          onClick={() => openModal("project")}
-                          className="border-2 border-dashed border-slate-200 rounded-[2rem] p-12 flex flex-col items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all bg-white hover:bg-blue-50/30 group"
-                        >
-                          <div className="h-16 w-16 rounded-3xl bg-slate-50 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                            <Plus className="h-8 w-8" />
-                          </div>
-                          <span className="font-black text-sm tracking-widest uppercase">Tambah Proyek Baru</span>
-                        </button>
+                        {isTenantAdmin && (
+                          <button 
+                            onClick={() => openModal("project")}
+                            className="border-2 border-dashed border-slate-200 rounded-[2rem] p-12 flex flex-col items-center justify-center text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all bg-white hover:bg-blue-50/30 group"
+                          >
+                            <div className="h-16 w-16 rounded-3xl bg-slate-50 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                              <Plus className="h-8 w-8" />
+                            </div>
+                            <span className="font-black text-sm tracking-widest uppercase">Tambah Proyek Baru</span>
+                          </button>
+                        )}
                       </div>
                     </>
                   ) : (
                     <div className="space-y-8 animate-in slide-in-from-right-10 duration-500">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-6">
-                          <button 
-                            onClick={closeProjectDetail}
-                            className="h-14 w-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm"
-                          >
-                            <Plus className="h-6 w-6 rotate-45" />
-                          </button>
-                          <div>
-                            <div className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Manajemen Proyek</div>
-                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">{selectedProject?.name}</h2>
+                      <Card className="border-slate-100 bg-white rounded-[2.5rem] shadow-sm overflow-hidden">
+                        <div className="relative h-64 bg-slate-100">
+                          {selectedProject?.heroMediaAsset?.url && (
+                            <Image
+                              src={selectedProject.heroMediaAsset.url}
+                              alt={selectedProject.name}
+                              fill
+                              sizes="100vw"
+                              className="object-cover"
+                            />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/30 to-transparent"></div>
+                          <div className="absolute inset-0 p-8 flex flex-col justify-between">
+                            <div className="flex items-start justify-between gap-6">
+                              <button
+                                onClick={closeProjectDetail}
+                                className="h-14 w-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all shadow-sm backdrop-blur"
+                              >
+                                <Plus className="h-6 w-6 rotate-45" />
+                              </button>
+                              <div className="flex gap-3">
+                                {isTenantAdmin && (
+                                  <>
+                                    <Button
+                                      onClick={() => {
+                                        if (!selectedProjectId) return;
+                                        setProjectImageTargetId(selectedProjectId);
+                                        projectImageInputRef.current?.click();
+                                      }}
+                                      variant="outline"
+                                      className="rounded-2xl border-white/30 bg-white/10 text-white px-6 h-12 font-black hover:bg-white/20 backdrop-blur"
+                                    >
+                                      <ImagePlus className="mr-2 h-5 w-5" /> Ganti Foto
+                                    </Button>
+                                    <Button
+                                      onClick={() => {
+                                        openModal("unit");
+                                        setUnitData((prev) => ({ ...prev, projectId: selectedProjectId || "" }));
+                                      }}
+                                      className="rounded-2xl bg-blue-600 px-8 h-12 font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 text-white"
+                                    >
+                                      <Plus className="mr-2 h-5 w-5" /> Tambah Unit Baru
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-end justify-between gap-8">
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-black text-blue-200 uppercase tracking-[0.2em] mb-2">
+                                  Manajemen Proyek
+                                </div>
+                                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight truncate">
+                                  {selectedProject?.name}
+                                </h2>
+                                {selectedProject?.description && (
+                                  <div className="mt-3 text-sm text-white/80 font-medium max-w-2xl line-clamp-2">
+                                    {selectedProject.description}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="hidden lg:flex items-center gap-4">
+                                <div className="px-5 py-3 rounded-2xl bg-white/10 border border-white/15 text-white backdrop-blur">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60">Total Unit</div>
+                                  <div className="text-2xl font-black tracking-tight mt-1">
+                                    {selectedProject?.units?.length ?? 0}
+                                  </div>
+                                </div>
+                                <div className="px-5 py-3 rounded-2xl bg-emerald-400/10 border border-emerald-200/20 text-white backdrop-blur">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-100/70">Terjual</div>
+                                  <div className="text-2xl font-black tracking-tight mt-1">
+                                    {selectedProject?.units?.filter((u) => u.status === "sold").length ?? 0}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex gap-3">
-                          <Button 
-                            onClick={() => {
-                              openModal("unit");
-                              setUnitData(prev => ({ ...prev, projectId: selectedProjectId || "" }));
-                            }}
-                            className="rounded-2xl bg-blue-600 px-8 h-12 font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 text-white"
-                          >
-                            <Plus className="mr-2 h-5 w-5" /> Tambah Unit Baru
-                          </Button>
-                        </div>
-                      </div>
+                      </Card>
 
                       <div className="grid gap-8 lg:grid-cols-12">
                         {/* Siteplan Visualization */}
@@ -2127,6 +2312,25 @@ export default function ErpDashboard() {
                                 {selectedProject?.units?.map((unit) => (
                                   <div 
                                     key={unit.id}
+                                    onClick={() => {
+                                      if (unit.status === "available") {
+                                        openModal("sales");
+                                        setSalesData((prev) => ({
+                                          ...prev,
+                                          projectId: selectedProjectId || "",
+                                          unitId: unit.id,
+                                          totalPrice: unit.price,
+                                        }));
+                                        return;
+                                      }
+
+                                      const saleId = unit.sales?.[0]?.id;
+                                      if (!saleId) {
+                                        toast.error("Detail penjualan tidak ditemukan untuk unit ini");
+                                        return;
+                                      }
+                                      openSaleDetailModal(saleId);
+                                    }}
                                     className={cn(
                                       "aspect-square rounded-2xl flex flex-col items-center justify-center border-2 transition-all cursor-pointer hover:scale-105 shadow-sm group relative",
                                       unit.status === 'available' ? "bg-white border-emerald-100 text-emerald-700 hover:border-emerald-400" :
@@ -2143,15 +2347,17 @@ export default function ErpDashboard() {
                                     </div>
                                   </div>
                                 ))}
-                                <button 
-                                  onClick={() => {
-                                    openModal("unit");
-                                    setUnitData(prev => ({ ...prev, projectId: selectedProjectId || "" }));
-                                  }}
-                                  className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:bg-white hover:border-blue-300 hover:text-blue-500 transition-all"
-                                >
-                                  <Plus className="h-8 w-8" />
-                                </button>
+                                {isTenantAdmin && (
+                                  <button 
+                                    onClick={() => {
+                                      openModal("unit");
+                                      setUnitData(prev => ({ ...prev, projectId: selectedProjectId || "" }));
+                                    }}
+                                    className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 hover:bg-white hover:border-blue-300 hover:text-blue-500 transition-all"
+                                  >
+                                    <Plus className="h-8 w-8" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </Card>
@@ -2182,16 +2388,37 @@ export default function ErpDashboard() {
                                     <div>Harga: <span className="text-slate-900">{formatRupiah(unit.price)}</span></div>
                                   </div>
                                   <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" className="flex-1 rounded-xl h-9 text-[10px] font-black uppercase tracking-widest border-slate-200 hover:bg-slate-50">Edit</Button>
+                                    {isTenantAdmin && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1 rounded-xl h-9 text-[10px] font-black uppercase tracking-widest border-slate-200 hover:bg-slate-50"
+                                      >
+                                        Edit
+                                      </Button>
+                                    )}
                                     <Button 
                                       onClick={() => {
-                                        openModal("sales");
-                                        setSalesData(prev => ({ ...prev, projectId: selectedProjectId || "", unitId: unit.id, totalPrice: unit.price }));
+                                        if (unit.status === "available") {
+                                          openModal("sales");
+                                          setSalesData(prev => ({ ...prev, projectId: selectedProjectId || "", unitId: unit.id, totalPrice: unit.price }));
+                                          return;
+                                        }
+
+                                        const saleId = unit.sales?.[0]?.id;
+                                        if (!saleId) {
+                                          toast.error("Detail penjualan tidak ditemukan untuk unit ini");
+                                          return;
+                                        }
+                                        openSaleDetailModal(saleId);
                                       }}
-                                      disabled={unit.status !== 'available'}
-                                      className="flex-1 rounded-xl h-9 text-[10px] font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/10 text-white disabled:opacity-30"
+                                      className={cn(
+                                        "rounded-xl h-9 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/10 text-white",
+                                        unit.status === "available" ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-900 hover:bg-slate-800 shadow-black/10",
+                                        isTenantAdmin ? "flex-1" : "w-full",
+                                      )}
                                     >
-                                      Booking
+                                      {unit.status === "available" ? "Booking" : "Detail"}
                                     </Button>
                                   </div>
                                 </div>
@@ -4158,7 +4385,10 @@ export default function ErpDashboard() {
                 "w-full bg-white border border-slate-200 rounded-[2.5rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.15)] overflow-hidden animate-in zoom-in-95 duration-500 max-h-[88vh] flex flex-col",
                 modalType === "renew"
                   ? "max-w-5xl"
-                  : modalType === "journal" || modalType === "customer-list" || modalType === "customer-detail"
+                  : modalType === "journal" ||
+                      modalType === "customer-list" ||
+                      modalType === "customer-detail" ||
+                      modalType === "sale-detail"
                     ? "max-w-4xl"
                     : "max-w-xl",
               )}
@@ -4169,6 +4399,7 @@ export default function ErpDashboard() {
                   <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                     {modalType === "project" && "Tambah Proyek Baru"}
                     {modalType === "sales" && "Input Penjualan Baru"}
+                    {modalType === "sale-detail" && "Detail Penjualan"}
                     {modalType === "journal" && "Buat Jurnal Baru"}
                     {modalType === "customer" && "Tambah Konsumen"}
                     {modalType === "customer-list" && "Database Konsumen"}
@@ -4356,7 +4587,7 @@ export default function ErpDashboard() {
                 {modalType === "doc-preview" && previewDoc && (
                   <div className="space-y-6">
                     <div className="p-8 bg-slate-50 border border-slate-100 rounded-[2rem] min-h-[400px] overflow-y-auto max-h-[60vh] font-serif shadow-inner">
-                      <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: previewDoc.content }}></div>
+                      <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: previewDocHtml }}></div>
                     </div>
                   </div>
                 )}
@@ -4683,7 +4914,11 @@ export default function ErpDashboard() {
                         </div>
                         <div className="mt-6 space-y-3">
                           {(customerDetail?.sales || []).map((s) => (
-                            <div key={s.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div
+                              key={s.id}
+                              onClick={() => openSaleDetailModal(s.id)}
+                              className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all cursor-pointer"
+                            >
                               <div className="text-sm font-black text-slate-900">
                                 {(s.project?.name || "Project") + (s.unit?.unitCode ? ` • ${s.unit.unitCode}` : "")}
                               </div>
@@ -4726,6 +4961,150 @@ export default function ErpDashboard() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {modalType === "sale-detail" && (
+                  <div className="space-y-6">
+                    <div className="p-8 rounded-[2rem] bg-slate-50 border border-slate-100">
+                      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Penjualan</div>
+                          <div className="text-xl font-black text-slate-900 tracking-tight mt-2">
+                            {isSaleDetailLoading
+                              ? "Memuat..."
+                              : saleDetail
+                                ? `${saleDetail.project.name} • ${saleDetail.unit.unitCode}`
+                                : "Penjualan tidak ditemukan"}
+                          </div>
+                          {saleDetail && (
+                            <div className="text-xs text-slate-500 font-medium mt-3">
+                              Konsumen: {saleDetail.customer.name}
+                            </div>
+                          )}
+                        </div>
+
+                        {saleDetail && (
+                          <div className="flex flex-col items-start lg:items-end gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] bg-white border border-slate-200 text-slate-600 shadow-sm">
+                                {saleDetail.status}
+                              </span>
+                              <span className="px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] bg-white border border-slate-200 text-slate-600 shadow-sm">
+                                ID: {saleDetail.id.slice(0, 8).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                Total
+                              </div>
+                              <div className="text-2xl font-black text-blue-600 tracking-tight mt-2">
+                                {formatRupiah(Number(saleDetail.totalPrice))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {saleDetail && (
+                      <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="p-8 rounded-[2rem] bg-white border border-slate-200 shadow-sm">
+                          <div className="flex items-center justify-between gap-6">
+                            <div>
+                              <div className="text-sm font-black text-slate-900">Dokumen</div>
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-2">
+                                {(saleDetail.documents || []).length} dokumen
+                              </div>
+                            </div>
+                            <Button
+                              onClick={() => generateSPR.mutate(saleDetail.id)}
+                              disabled={generateSPR.isPending}
+                              className="h-11 rounded-2xl bg-blue-600 text-white font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 px-6"
+                            >
+                              Generate SPR
+                            </Button>
+                          </div>
+
+                          <div className="mt-6 space-y-3">
+                            {(saleDetail.documents || []).map((doc) => (
+                              <div
+                                key={doc.id}
+                                className="p-5 rounded-3xl bg-slate-50 border border-slate-100"
+                              >
+                                <div className="flex items-start justify-between gap-6">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-black text-slate-900 truncate">
+                                      {doc.template?.name || "Dokumen"}
+                                    </div>
+                                    <div className="text-xs text-slate-500 font-medium mt-2">
+                                      {new Date(doc.createdAt).toLocaleDateString("id-ID")} • {doc.status}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    className="h-11 rounded-2xl border-slate-200 bg-white font-black text-[10px] uppercase tracking-[0.2em] px-5"
+                                    onClick={() => {
+                                      setPreviewDoc({
+                                        name: doc.template?.name || "Dokumen",
+                                        content: doc.content,
+                                      });
+                                      setModalType("doc-preview");
+                                      setIsModalOpen(true);
+                                    }}
+                                  >
+                                    Preview
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                            {(saleDetail.documents || []).length === 0 && (
+                              <div className="p-10 text-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl bg-white/50">
+                                <p className="font-black text-xs uppercase tracking-widest opacity-30">
+                                  Belum ada dokumen
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="p-8 rounded-[2rem] bg-white border border-slate-200 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-black text-slate-900">Jadwal Pembayaran</div>
+                            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                              {(saleDetail.payments || []).length} item
+                            </div>
+                          </div>
+                          <div className="mt-6 space-y-3">
+                            {(saleDetail.payments || []).map((p) => (
+                              <div key={p.id} className="p-5 rounded-3xl bg-slate-50 border border-slate-100">
+                                <div className="flex items-start justify-between gap-6">
+                                  <div>
+                                    <div className="text-sm font-black text-slate-900">
+                                      {formatRupiah(Number(p.amount))}
+                                    </div>
+                                    <div className="text-xs text-slate-500 font-medium mt-2">
+                                      Jatuh tempo: {new Date(p.dueDate).toLocaleDateString("id-ID")}
+                                      {p.paidDate ? ` • Dibayar: ${new Date(p.paidDate).toLocaleDateString("id-ID")}` : ""}
+                                    </div>
+                                  </div>
+                                  <span className="px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] bg-white border border-slate-200 text-slate-600 shadow-sm">
+                                    {p.status}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                            {(saleDetail.payments || []).length === 0 && (
+                              <div className="p-10 text-center text-slate-300 border-2 border-dashed border-slate-100 rounded-3xl bg-white/50">
+                                <p className="font-black text-xs uppercase tracking-widest opacity-30">
+                                  Belum ada jadwal pembayaran
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -6006,18 +6385,65 @@ export default function ErpDashboard() {
                       onClick={() => {
                         const win = window.open("", "_blank");
                         if (win) {
+                          const companyName = (settingsTenantName || "Livinova Enterprise").trim();
+                          const printedAt = new Date().toLocaleString("id-ID");
+                          const isBrandedDoc = previewDocHtml.includes("Dokumen internal perusahaan");
                           win.document.write(`
                             <html>
                               <head>
-                                <title>${previewDoc.name}</title>
+                                <title></title>
                                 <style>
-                                  body { font-family: serif; padding: 40px; line-height: 1.6; max-width: 800px; margin: auto; }
-                                  h1 { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                                  @page { size: A4; margin: 0; }
+                                  html, body { height: 100%; }
+                                  body { font-family: "Times New Roman", serif; color: #0f172a; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                                  .page { padding: 18mm; }
+                                  .doc { max-width: 820px; margin: 0 auto; }
+                                  .letterhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 2px solid #0f172a; }
+                                  .brand { font-weight: 800; letter-spacing: 0.08em; font-size: 16px; text-transform: uppercase; }
+                                  .sub { color: #64748b; font-size: 11px; margin-top: 6px; }
+                                  .meta { text-align: right; }
+                                  .meta .label { color: #64748b; font-size: 11px; }
+                                  .meta .value { font-weight: 700; font-size: 12px; margin-top: 6px; }
+                                  .content { padding-top: 18px; }
+                                  h1, h2, h3 { margin: 0; }
+                                  h1 { font-size: 22px; font-weight: 800; letter-spacing: 0.08em; text-align: center; margin-top: 6px; }
+                                  p { margin: 0 0 10px 0; }
+                                  table { width: 100%; border-collapse: collapse; }
+                                  td, th { vertical-align: top; }
+                                  .footer { margin-top: 18px; padding-top: 12px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 10px; }
                                 </style>
                               </head>
-                              <body>${previewDoc.content}</body>
+                              <body>
+                                <div class="page">
+                                  <div class="doc">
+                                    ${
+                                      isBrandedDoc
+                                        ? `${previewDocHtml}`
+                                        : `
+                                          <div class="letterhead">
+                                            <div>
+                                              <div class="brand">${companyName}</div>
+                                              <div class="sub">Dokumen perusahaan • ERP Livinova</div>
+                                            </div>
+                                            <div class="meta">
+                                              <div class="label">Dicetak pada</div>
+                                              <div class="value">${printedAt}</div>
+                                            </div>
+                                          </div>
+                                          <div class="content">
+                                            ${previewDocHtml}
+                                          </div>
+                                          <div class="footer">
+                                            Dokumen ini dihasilkan otomatis oleh sistem. Harap verifikasi data sebelum ditandatangani.
+                                          </div>
+                                        `
+                                    }
+                                  </div>
+                                </div>
+                              </body>
                             </html>
                           `);
+                          win.document.title = "";
                           win.document.close();
                           win.print();
                         }
@@ -6043,7 +6469,7 @@ export default function ErpDashboard() {
                       TUTUP
                     </Button>
                   </>
-                ) : modalType === "customer-list" || modalType === "customer-detail" ? (
+                ) : modalType === "customer-list" || modalType === "customer-detail" || modalType === "sale-detail" ? (
                   <>
                     <Button
                       variant="ghost"

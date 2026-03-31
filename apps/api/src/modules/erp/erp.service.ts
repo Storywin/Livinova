@@ -969,8 +969,54 @@ export class ErpService {
     await this.checkSubscription(tenantId);
     return this.prisma.erpProject.findMany({
       where: { tenantId },
-      include: { units: true },
+      include: {
+        heroMediaAsset: { select: { id: true, url: true } },
+        units: {
+          include: {
+            sales: {
+              select: { id: true, status: true, createdAt: true },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
     });
+  }
+
+  async uploadProjectHero(tenantId: string, projectId: string, file: Express.Multer.File) {
+    await this.checkSubscription(tenantId);
+    if (!file) throw new BadRequestException("File wajib");
+    if (!file.mimetype?.includes("image")) {
+      throw new BadRequestException("File harus berupa gambar");
+    }
+
+    const project = await this.prisma.erpProject.findFirst({
+      where: { id: projectId, tenantId },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException("Project not found");
+
+    const publicUrl = `/uploads/${file.filename}`;
+    const media = await this.prisma.mediaAsset.create({
+      data: {
+        kind: "image",
+        bucket: "web-public",
+        key: `uploads/${file.filename}`,
+        url: publicUrl,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+      },
+      select: { id: true, url: true },
+    });
+
+    await this.prisma.erpProject.update({
+      where: { id: projectId },
+      data: { heroMediaAssetId: media.id },
+      select: { id: true },
+    });
+
+    return { ok: true, url: media.url, mediaAssetId: media.id };
   }
 
   async createUnit(projectId: string, data: Prisma.ErpUnitCreateWithoutProjectInput) {
@@ -2221,6 +2267,26 @@ export class ErpService {
     return sales;
   }
 
+  async getSale(tenantId: string, salesId: string) {
+    await this.checkSubscription(tenantId);
+    const sales = await this.prisma.erpSales.findFirst({
+      where: { id: salesId, tenantId },
+      include: {
+        customer: true,
+        project: true,
+        unit: true,
+        payments: { orderBy: { dueDate: "asc" } },
+        documents: { include: { template: true }, orderBy: { createdAt: "desc" } },
+        journals: {
+          include: { details: { include: { account: true } } },
+          orderBy: { date: "desc" },
+        },
+      },
+    });
+    if (!sales) throw new NotFoundException("Sales not found");
+    return sales;
+  }
+
   async handoverSales(tenantId: string, salesId: string, handoverAt?: string) {
     await this.checkSubscription(tenantId);
 
@@ -2547,6 +2613,18 @@ export class ErpService {
 
     this.logger.log(`Generating document for salesId: ${salesId}, templateId: ${templateId}`);
 
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: sales.tenantId },
+      select: { name: true, slug: true },
+    });
+
+    const formatThousandsId = (value: string) => {
+      const digits = value.replace(/[^\d]/g, "");
+      if (!digits) return "0";
+      const normalized = digits.replace(/^0+/, "") || "0";
+      return normalized.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    };
+
     let template = await this.prisma.erpDocumentTemplate.findUnique({
       where: { id: templateId },
     });
@@ -2560,21 +2638,181 @@ export class ErpService {
           name: "Surat Pesanan Rumah (SPR) Standard",
           type: "SPR",
           content: `
-            <h1>SURAT PESANAN RUMAH (SPR)</h1>
-            <p>Nomor: SPR/{{date}}/{{unit_code}}</p>
-            <br/>
-            <p>Saya yang bertanda tangan di bawah ini:</p>
-            <p>Nama: {{customer_name}}</p>
-            <br/>
-            <p>Menyatakan memesan unit properti sebagai berikut:</p>
-            <p>Proyek: {{project_name}}</p>
-            <p>Unit: {{unit_code}}</p>
-            <p>Harga: {{price}}</p>
-            <br/>
-            <p>Demikian surat pesanan ini dibuat dengan sebenar-benarnya.</p>
+            <div style="font-family: 'Times New Roman', serif; color: #0f172a; line-height: 1.6;">
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;">
+                <div>
+                  <div style="font-size: 18px; font-weight: 800; letter-spacing: 0.06em;">{{company_name}}</div>
+                  <div style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                    Dokumen internal perusahaan • {{company_slug}}
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 12px; color: #64748b;">Tanggal</div>
+                  <div style="font-size: 14px; font-weight: 700;">{{date_long}}</div>
+                </div>
+              </div>
+
+              <div style="margin-top: 18px; border-top: 2px solid #0f172a;"></div>
+
+              <div style="text-align: center; margin-top: 18px;">
+                <div style="font-size: 22px; font-weight: 800; letter-spacing: 0.08em;">SURAT PESANAN RUMAH (SPR)</div>
+                <div style="font-size: 12px; color: #475569; margin-top: 26px;">
+                  Nomor: SPR/{{date_code}}/{{unit_code}}
+                </div>
+              </div>
+
+              <div style="margin-top: 18px; border-top: 1px solid #cbd5e1;"></div>
+
+              <div style="margin-top: 18px;">
+                <div style="font-size: 13px;">
+                  Saya yang bertanda tangan di bawah ini, dengan ini menyatakan melakukan pemesanan unit properti sebagai berikut:
+                </div>
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                <tbody>
+                  <tr>
+                    <td style="width: 28%; padding: 10px 0; color: #334155; font-size: 12px;">Nama Pemesan</td>
+                    <td style="padding: 10px 0; font-weight: 700; font-size: 12px;">: {{customer_name}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #334155; font-size: 12px;">Proyek</td>
+                    <td style="padding: 10px 0; font-weight: 700; font-size: 12px;">: {{project_name}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #334155; font-size: 12px;">Unit</td>
+                    <td style="padding: 10px 0; font-weight: 700; font-size: 12px;">: {{unit_code}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #334155; font-size: 12px;">Harga</td>
+                    <td style="padding: 10px 0; font-weight: 800; font-size: 12px;">: Rp {{price}}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div style="margin-top: 18px; font-size: 13px; color: #0f172a;">
+                Demikian surat pesanan ini dibuat dengan sebenar-benarnya untuk dipergunakan sebagaimana mestinya.
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin-top: 34px;">
+                <tbody>
+                  <tr>
+                    <td style="width: 50%; text-align: left; font-size: 12px; color: #334155;">
+                      Pemesan,
+                      <div style="height: 64px;"></div>
+                      <div style="font-weight: 800;">{{customer_name}}</div>
+                    </td>
+                    <td style="width: 50%; text-align: right; font-size: 12px; color: #334155;">
+                      Developer,
+                      <div style="height: 64px;"></div>
+                      <div style="font-weight: 800;">{{company_name}}</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div style="margin-top: 26px; border-top: 1px solid #e2e8f0;"></div>
+              <div style="margin-top: 10px; font-size: 10px; color: #94a3b8;">
+                Dokumen ini dihasilkan otomatis oleh sistem ERP. Harap verifikasi kembali data sebelum ditandatangani.
+              </div>
+            </div>
           `,
         },
       });
+    }
+
+    if (template && templateId === "spr-standard") {
+      const isLegacyDefault = template.content.includes("<h1>SURAT PESANAN RUMAH (SPR)</h1>");
+      const hasTightNomorSpacing = template.content.includes(
+        'color: #475569; margin-top: 10px;">Nomor: SPR/{{date_code}}/{{unit_code}}',
+      );
+      if (isLegacyDefault || hasTightNomorSpacing) {
+        template = await this.prisma.erpDocumentTemplate.update({
+          where: { id: templateId },
+          data: {
+            content: `
+            <div style="font-family: 'Times New Roman', serif; color: #0f172a; line-height: 1.6;">
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;">
+                <div>
+                  <div style="font-size: 18px; font-weight: 800; letter-spacing: 0.06em;">{{company_name}}</div>
+                  <div style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                    Dokumen internal perusahaan • {{company_slug}}
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 12px; color: #64748b;">Tanggal</div>
+                  <div style="font-size: 14px; font-weight: 700;">{{date_long}}</div>
+                </div>
+              </div>
+
+              <div style="margin-top: 18px; border-top: 2px solid #0f172a;"></div>
+
+              <div style="text-align: center; margin-top: 18px;">
+                <div style="font-size: 22px; font-weight: 800; letter-spacing: 0.08em;">SURAT PESANAN RUMAH (SPR)</div>
+                <div style="font-size: 12px; color: #475569; margin-top: 26px;">
+                  Nomor: SPR/{{date_code}}/{{unit_code}}
+                </div>
+              </div>
+
+              <div style="margin-top: 18px; border-top: 1px solid #cbd5e1;"></div>
+
+              <div style="margin-top: 18px;">
+                <div style="font-size: 13px;">
+                  Saya yang bertanda tangan di bawah ini, dengan ini menyatakan melakukan pemesanan unit properti sebagai berikut:
+                </div>
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                <tbody>
+                  <tr>
+                    <td style="width: 28%; padding: 10px 0; color: #334155; font-size: 12px;">Nama Pemesan</td>
+                    <td style="padding: 10px 0; font-weight: 700; font-size: 12px;">: {{customer_name}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #334155; font-size: 12px;">Proyek</td>
+                    <td style="padding: 10px 0; font-weight: 700; font-size: 12px;">: {{project_name}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #334155; font-size: 12px;">Unit</td>
+                    <td style="padding: 10px 0; font-weight: 700; font-size: 12px;">: {{unit_code}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #334155; font-size: 12px;">Harga</td>
+                    <td style="padding: 10px 0; font-weight: 800; font-size: 12px;">: Rp {{price}}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div style="margin-top: 18px; font-size: 13px; color: #0f172a;">
+                Demikian surat pesanan ini dibuat dengan sebenar-benarnya untuk dipergunakan sebagaimana mestinya.
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin-top: 34px;">
+                <tbody>
+                  <tr>
+                    <td style="width: 50%; text-align: left; font-size: 12px; color: #334155;">
+                      Pemesan,
+                      <div style="height: 64px;"></div>
+                      <div style="font-weight: 800;">{{customer_name}}</div>
+                    </td>
+                    <td style="width: 50%; text-align: right; font-size: 12px; color: #334155;">
+                      Developer,
+                      <div style="height: 64px;"></div>
+                      <div style="font-weight: 800;">{{company_name}}</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div style="margin-top: 26px; border-top: 1px solid #e2e8f0;"></div>
+              <div style="margin-top: 10px; font-size: 10px; color: #94a3b8;">
+                Dokumen ini dihasilkan otomatis oleh sistem ERP. Harap verifikasi kembali data sebelum ditandatangani.
+              </div>
+            </div>
+            `,
+          },
+        });
+      }
     }
 
     if (!template) {
@@ -2583,12 +2821,23 @@ export class ErpService {
 
     // Replace variables (simple template engine)
     let content = template.content;
+    const now = new Date();
+    const rawPrice = sales.totalPrice?.toString() || "0";
+    const price = formatThousandsId(rawPrice.split(".")[0] || rawPrice);
     const variables = {
       "{{customer_name}}": sales.customer?.name || "Customer",
       "{{unit_code}}": sales.unit?.unitCode || "N/A",
-      "{{price}}": sales.totalPrice?.toString() || "0",
+      "{{price}}": price,
       "{{project_name}}": sales.project?.name || "Project",
-      "{{date}}": new Date().toLocaleDateString("id-ID"),
+      "{{date}}": now.toLocaleDateString("id-ID"),
+      "{{date_long}}": now.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      }),
+      "{{date_code}}": now.toISOString().slice(0, 10).replaceAll("-", ""),
+      "{{company_name}}": tenant?.name || "Company",
+      "{{company_slug}}": tenant?.slug || "-",
     };
 
     for (const [key, value] of Object.entries(variables)) {
