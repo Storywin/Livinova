@@ -18,6 +18,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       localStorage.setItem("livinova_access_token", token);
     } else {
       localStorage.removeItem("livinova_access_token");
+      localStorage.removeItem("livinova_refresh_token");
     }
     const roles = token ? (parseJwt(token)?.roles ?? []) : [];
     set({ token, roles });
@@ -28,7 +29,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const token = getAccessToken();
       const roles = token ? (parseJwt(token)?.roles ?? []) : [];
       set({ token, roles, hydrated: true });
-    } catch (err) {
+    } catch {
       set({ hydrated: true });
     }
   },

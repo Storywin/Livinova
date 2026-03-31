@@ -28,7 +28,7 @@ type NavGroup = { label: string; items: NavItem[] };
 export function AdminShell({ title, children }: { title: string; children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { token, hydrated, roles } = useAuthStore();
+  const { hydrated, roles } = useAuthStore();
   const setToken = useAuthStore((s) => s.setToken);
 
   const isSuperAdmin = roles.includes("super_admin");

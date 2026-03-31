@@ -21,16 +21,11 @@ import { TenantResolverMiddleware } from "./middleware/tenant-resolver.middlewar
 })
 export class ErpModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // Apply multi-tenant and license middlewares to specific ERP routes
     consumer
       .apply(TenantResolverMiddleware, LicenseCheckerMiddleware)
       .forRoutes(
-        { path: "api/erp/partner/*path", method: RequestMethod.ALL },
-        { path: "api/erp/tenant/*path", method: RequestMethod.ALL },
-        { path: "api/erp/projects", method: RequestMethod.ALL },
-        { path: "api/erp/customers", method: RequestMethod.ALL },
-        { path: "api/erp/sales", method: RequestMethod.ALL },
-        { path: "api/erp/accounts", method: RequestMethod.ALL },
+        { path: "api/erp", method: RequestMethod.ALL },
+        { path: "api/erp/*path", method: RequestMethod.ALL },
       );
   }
 }

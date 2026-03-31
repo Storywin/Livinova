@@ -1,4 +1,4 @@
-import { getAccessToken } from "./auth";
+import { getAccessToken, getRefreshToken } from "./auth";
 
 export class ApiError extends Error {
   status: number;
@@ -7,6 +7,17 @@ export class ApiError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+type RefreshResponse = {
+  accessToken: string;
+  refreshToken: string;
+};
+
+function isRefreshResponse(value: unknown): value is RefreshResponse {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.accessToken === "string" && typeof v.refreshToken === "string";
 }
 
 function getErrorMessage(body: unknown) {
@@ -39,8 +50,6 @@ export async function apiFetch<T>(
     }
   }
 
-  const token = getAccessToken();
-
   let requestBody: BodyInit | undefined;
   if (init?.body !== undefined) {
     if (typeof init.body === "string") {
@@ -52,24 +61,57 @@ export async function apiFetch<T>(
     }
   }
 
-  const res = await fetch(`${baseUrl}${path}`, {
-    cache: init?.cache ?? "no-store",
-    ...init,
-    body: requestBody,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
+  const doRequest = async (tokenOverride?: string | null) => {
+    const token = tokenOverride ?? getAccessToken();
+    const res = await fetch(`${baseUrl}${path}`, {
+      cache: init?.cache ?? "no-store",
+      ...init,
+      body: requestBody,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
 
-  const text = await res.text();
-  const result = text ? (JSON.parse(text) as unknown) : null;
+    const text = await res.text();
+    const result = text ? (JSON.parse(text) as unknown) : null;
+    return { res, result };
+  };
 
-  if (!res.ok) {
-    const message = getErrorMessage(result) ?? `Request gagal (${res.status})`;
-    throw new ApiError(message, res.status);
+  const first = await doRequest(null);
+  if (first.res.ok) return first.result as T;
+
+  if (first.res.status === 401 && typeof window !== "undefined") {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      try {
+        const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+          cache: "no-store",
+        });
+
+        const refreshText = await refreshRes.text();
+        const refreshJson = refreshText ? (JSON.parse(refreshText) as unknown) : null;
+
+        if (refreshRes.ok && isRefreshResponse(refreshJson)) {
+          localStorage.setItem("livinova_access_token", refreshJson.accessToken);
+          localStorage.setItem("livinova_refresh_token", refreshJson.refreshToken);
+
+          const second = await doRequest(refreshJson.accessToken);
+          if (second.res.ok) return second.result as T;
+
+          const message2 = getErrorMessage(second.result) ?? `Request gagal (${second.res.status})`;
+          throw new ApiError(message2, second.res.status);
+        }
+      } catch {
+        // fall through to original error
+      }
+    }
   }
 
-  return result as T;
+  const message = getErrorMessage(first.result) ?? `Request gagal (${first.res.status})`;
+  throw new ApiError(message, first.res.status);
 }

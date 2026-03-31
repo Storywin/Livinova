@@ -4,7 +4,6 @@ import {
   Building2, 
   Lock, 
   User, 
-  ChevronRight, 
   ShieldCheck, 
   Globe2,
   Sparkles,
@@ -18,7 +17,7 @@ import { Container } from "@/components/site/container";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -28,6 +27,7 @@ import { useRouter } from "next/navigation";
 type LoginResponse = {
   tokens?: {
     accessToken?: string;
+    refreshToken?: string;
   };
 };
 
@@ -66,6 +66,9 @@ export default function ErpLoginPage() {
 
       if (res.tokens?.accessToken) {
         setToken(res.tokens.accessToken);
+        if (res.tokens.refreshToken) {
+          localStorage.setItem("livinova_refresh_token", res.tokens.refreshToken);
+        }
         // Add a small delay to ensure token is saved to localStorage
         setTimeout(() => {
           router.push("/dashboard?from=erp");

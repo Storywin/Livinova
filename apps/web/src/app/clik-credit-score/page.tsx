@@ -3,8 +3,6 @@
 import { useState, useMemo } from "react";
 import { 
   ShieldCheck, 
-  Info, 
-  ChevronRight, 
   AlertCircle, 
   CheckCircle2, 
   TrendingUp, 
@@ -14,7 +12,6 @@ import {
   HelpCircle,
   FileText,
   Clock,
-  ArrowRight,
   Sparkles,
   BarChart3,
   Search,

@@ -2,6 +2,7 @@
 
 import type { ChangeEvent } from "react";
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { RequireErp } from "@/components/erp/require-erp";
 import { 
@@ -18,19 +19,15 @@ import {
   UserCog,
   Database,
   Search,
-  ExternalLink,
-  ChevronRight,
   Sparkles,
   Plus,
   X,
   Loader2,
   Mail,
   Phone,
-  MapPin,
   Trash2,
   Globe,
   Key,
-  Bell,
   CheckCircle2,
   ShieldCheck,
   AlertTriangle
@@ -172,7 +169,7 @@ export default function ErpSuperAdminDashboard() {
     { event: "license.purchased", url: "https://webhooks.livinova.id/license" },
   ]);
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ["erp-admin-stats"],
     queryFn: () => apiFetch<AdminStats>("/api/erp/admin/stats"),
   });
@@ -314,6 +311,20 @@ export default function ErpSuperAdminDashboard() {
     }
   });
 
+  const deletePlanMutation = useMutation({
+    mutationFn: (planId: string) =>
+      apiFetch(`/api/erp/admin/pricing/${planId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["erp-admin-pricing"] });
+      alert("Pricing plan berhasil dihapus.");
+    },
+    onError: (error: unknown) => {
+      alert(getErrorMessage(error, "Gagal menghapus pricing plan"));
+    },
+  });
+
   const updatePartnerMutation = useMutation({
     mutationFn: (input: { partnerId: string; data: { name?: string; email?: string; phone?: string } }) =>
       apiFetch(`/api/erp/admin/partners/${input.partnerId}`, {
@@ -402,14 +413,6 @@ export default function ErpSuperAdminDashboard() {
   const formatTB = (bytes: number) => {
     if (!bytes) return "0 TB";
     return (bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1) + " TB";
-  };
-
-  const formatUptime = (seconds: number) => {
-    if (!seconds) return "0m";
-    const d = Math.floor(seconds / (3600 * 24));
-    const h = Math.floor((seconds % (3600 * 24)) / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${d}d ${h}h ${m}m`;
   };
 
   const navItems = [
@@ -512,7 +515,14 @@ export default function ErpSuperAdminDashboard() {
                     <span className="text-[10px] font-black text-emerald-500 uppercase">Secure</span>
                   </div>
                   <div className="h-10 w-10 rounded-xl border border-slate-800 bg-slate-900 flex items-center justify-center overflow-hidden hover:border-rose-500/50 transition-colors cursor-pointer shadow-lg">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=SuperAdmin" alt="Avatar" className="h-full w-full object-cover" />
+                    <Image
+                      unoptimized
+                      src="https://api.dicebear.com/7.x/avataaars/svg?seed=SuperAdmin"
+                      alt="Avatar"
+                      width={80}
+                      height={80}
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                 </div>
               </div>
@@ -883,7 +893,17 @@ export default function ErpSuperAdminDashboard() {
                         <div>
                           <div className="flex justify-between items-start mb-4">
                             <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-500 rounded-full text-[10px] font-black uppercase tracking-widest">{plan.durationDays} DAYS</span>
-                            <button className="text-slate-600 hover:text-white"><Trash2 className="h-4 w-4" /></button>
+                            <button
+                              onClick={() => {
+                                const ok = confirm(`Hapus pricing plan "${plan.name}"?`);
+                                if (!ok) return;
+                                deletePlanMutation.mutate(plan.id);
+                              }}
+                              disabled={deletePlanMutation.isPending}
+                              className="text-slate-600 hover:text-white disabled:opacity-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
                           <h4 className="text-2xl font-black text-white tracking-tight mb-2">{plan.name}</h4>
                           <p className="text-xs text-slate-400 font-medium mb-6">{plan.description}</p>

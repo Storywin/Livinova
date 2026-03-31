@@ -33,7 +33,15 @@ export class TenantResolverMiddleware implements NestMiddleware {
           decoded && typeof decoded === "object" ? (decoded as Record<string, unknown>) : null;
         const sub = decodedObject?.sub;
         const id = decodedObject?.id;
-        const userId = typeof sub === "string" ? sub : typeof id === "string" ? id : null;
+        const userIdClaim = decodedObject?.userId;
+        const userId =
+          typeof sub === "string"
+            ? sub
+            : typeof id === "string"
+              ? id
+              : typeof userIdClaim === "string"
+                ? userIdClaim
+                : null;
         if (userId) {
           const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -75,7 +83,17 @@ export class TenantResolverMiddleware implements NestMiddleware {
       (s) => s.status === "active" && s.endDate > new Date(),
     );
 
-    if (!activeSubscription && tenant.partnerId !== "livinova-owner") {
+    const partnerId = tenant.partnerId;
+    const isSystemTenant = partnerId === "livinova-owner";
+    const isDirectTenant = !partnerId;
+    const hasNoPartnerSubscriptionRecords = (tenant.partner?.subscriptions?.length ?? 0) === 0;
+
+    if (
+      !isDirectTenant &&
+      !isSystemTenant &&
+      !hasNoPartnerSubscriptionRecords &&
+      !activeSubscription
+    ) {
       throw new UnauthorizedException("Partner subscription has expired. Please contact support.");
     }
 

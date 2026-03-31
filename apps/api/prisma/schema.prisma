@@ -21,21 +21,32 @@ model Partner {
 }
 
 model Tenant {
-  id         String             @id @default(uuid())
-  partnerId  String?
-  name       String
-  slug       String             @unique
-  status     SubscriptionStatus @default(trial)
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
-  accounts   ErpAccount[]
-  customers  ErpCustomer[]
-  projects   ErpProject[]
-  warehouses ErpWarehouse[]
-  invoices   Invoice[]
-  licenses   License[]
-  partner    Partner?           @relation(fields: [partnerId], references: [id])
-  users      User[]             @relation("TenantUsers")
+  id                 String                 @id @default(uuid())
+  partnerId          String?
+  name               String
+  slug               String                 @unique
+  status             SubscriptionStatus     @default(trial)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  accounts           ErpAccount[]
+  customers          ErpCustomer[]
+  leads              ErpLead[]
+  leadActivities     ErpLeadActivity[]
+  vendors            ErpVendor[]
+  purchaseOrders     ErpPurchaseOrder[]
+  vendorBills        ErpVendorBill[]
+  vendorPayments     ErpVendorPayment[]
+  employees          ErpEmployee[]
+  payrollPeriods     ErpPayrollPeriod[]
+  payrollRuns        ErpPayrollRun[]
+  payrollSettlements ErpPayrollSettlement[]
+  commissionPayouts  ErpCommissionPayout[]
+  projects           ErpProject[]
+  warehouses         ErpWarehouse[]
+  invoices           Invoice[]
+  licenses           License[]
+  partner            Partner?               @relation(fields: [partnerId], references: [id])
+  users              User[]                 @relation("TenantUsers")
 
   @@index([partnerId])
 }
@@ -170,15 +181,20 @@ model RolePermission {
 }
 
 model ErpProject {
-  id          String     @id @default(uuid())
-  tenantId    String
-  name        String
-  description String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  tenant      Tenant     @relation(fields: [tenantId], references: [id])
-  sales       ErpSales[]
-  units       ErpUnit[]
+  id                       String                @id @default(uuid())
+  tenantId                 String
+  name                     String
+  description              String?
+  revenueRecognitionMethod ErpRevenueRecognition @default(point_in_time)
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  tenant                   Tenant                @relation(fields: [tenantId], references: [id])
+  leads                    ErpLead[]
+  purchaseOrders           ErpPurchaseOrder[]
+  vendorBills              ErpVendorBill[]
+  sales                    ErpSales[]
+  units                    ErpUnit[]
+  journals                 ErpJournal[]
 
   @@index([tenantId])
 }
@@ -214,30 +230,343 @@ model ErpCustomer {
 }
 
 model ErpLead {
-  id         String       @id @default(uuid())
+  id         String            @id @default(uuid())
+  tenantId   String
+  projectId  String?
   customerId String?
+  name       String
+  email      String?
+  phone      String?
   source     String
-  status     String       @default("new")
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  customer   ErpCustomer? @relation(fields: [customerId], references: [id])
+  status     ErpLeadStatus     @default(new)
+  notes      String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  tenant     Tenant            @relation(fields: [tenantId], references: [id])
+  project    ErpProject?       @relation(fields: [projectId], references: [id])
+  customer   ErpCustomer?      @relation(fields: [customerId], references: [id])
+  activities ErpLeadActivity[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model ErpLeadActivity {
+  id             String              @id @default(uuid())
+  tenantId       String
+  leadId         String
+  type           ErpLeadActivityType @default(note)
+  notes          String?
+  nextFollowUpAt DateTime?
+  createdById    String?
+  createdAt      DateTime            @default(now())
+
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  lead      ErpLead @relation(fields: [leadId], references: [id])
+  createdBy User?   @relation(fields: [createdById], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, leadId])
+  @@index([tenantId, nextFollowUpAt])
+}
+
+model ErpVendor {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  taxId     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
+  purchaseOrders ErpPurchaseOrder[]
+  bills          ErpVendorBill[]
+
+  @@index([tenantId])
+  @@index([tenantId, name])
+}
+
+model ErpPurchaseOrder {
+  id          String                 @id @default(uuid())
+  tenantId    String
+  projectId   String?
+  vendorId    String
+  poNumber    String
+  date        DateTime
+  notes       String?
+  status      ErpPurchaseOrderStatus @default(draft)
+  createdById String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  tenant    Tenant                 @relation(fields: [tenantId], references: [id])
+  project   ErpProject?            @relation(fields: [projectId], references: [id])
+  vendor    ErpVendor              @relation(fields: [vendorId], references: [id])
+  createdBy User?                  @relation(fields: [createdById], references: [id])
+  items     ErpPurchaseOrderItem[]
+  bills     ErpVendorBill[]
+
+  @@unique([tenantId, poNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, vendorId])
+}
+
+model ErpPurchaseOrderItem {
+  id              String  @id @default(uuid())
+  purchaseOrderId String
+  description     String
+  qty             Decimal @db.Decimal(18, 2)
+  unitPrice       Decimal @db.Decimal(18, 2)
+  wipAccountCode  String  @default("103.04")
+
+  purchaseOrder ErpPurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  @@index([purchaseOrderId])
+}
+
+model ErpVendorBill {
+  id               String              @id @default(uuid())
+  tenantId         String
+  projectId        String?
+  vendorId         String
+  purchaseOrderId  String?
+  invoiceNumber    String
+  date             DateTime
+  dueDate          DateTime?
+  currency         String              @default("IDR")
+  subtotal         Decimal             @db.Decimal(18, 2)
+  taxAmount        Decimal             @default(0) @db.Decimal(18, 2)
+  retentionPercent Decimal?            @db.Decimal(5, 2)
+  retentionAmount  Decimal             @default(0) @db.Decimal(18, 2)
+  total            Decimal             @db.Decimal(18, 2)
+  status           ErpVendorBillStatus @default(draft)
+  postedAt         DateTime?
+  paidAt           DateTime?
+  notes            String?
+  createdById      String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  tenant        Tenant              @relation(fields: [tenantId], references: [id])
+  project       ErpProject?         @relation(fields: [projectId], references: [id])
+  vendor        ErpVendor           @relation(fields: [vendorId], references: [id])
+  purchaseOrder ErpPurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
+  createdBy     User?               @relation(fields: [createdById], references: [id])
+  items         ErpVendorBillItem[]
+  payments      ErpVendorPayment[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, vendorId])
+  @@index([tenantId, projectId])
+}
+
+model ErpVendorBillItem {
+  id             String  @id @default(uuid())
+  billId         String
+  description    String
+  amount         Decimal @db.Decimal(18, 2)
+  wipAccountCode String  @default("103.04")
+
+  bill ErpVendorBill @relation(fields: [billId], references: [id])
+
+  @@index([billId])
+}
+
+model ErpVendorPayment {
+  id              String               @id @default(uuid())
+  tenantId        String
+  billId          String
+  date            DateTime
+  amount          Decimal              @db.Decimal(18, 2)
+  cashAccountCode String               @default("101.02")
+  type            ErpVendorPaymentType @default(payment)
+  notes           String?
+  createdById     String?
+  createdAt       DateTime             @default(now())
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id])
+  bill      ErpVendorBill @relation(fields: [billId], references: [id])
+  createdBy User?         @relation(fields: [createdById], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, billId])
+}
+
+model ErpEmployee {
+  id           String            @id @default(uuid())
+  tenantId     String
+  userId       String?
+  employeeNo   String
+  name         String
+  email        String?
+  phone        String?
+  department   String?
+  position     String?
+  status       ErpEmployeeStatus @default(active)
+  startDate    DateTime          @default(now())
+  endDate      DateTime?
+  basicSalary  Decimal           @default(0) @db.Decimal(18, 2)
+  allowance    Decimal           @default(0) @db.Decimal(18, 2)
+  pph21        Decimal           @default(0) @db.Decimal(18, 2)
+  bpjsEmployee Decimal           @default(0) @db.Decimal(18, 2)
+  bpjsEmployer Decimal           @default(0) @db.Decimal(18, 2)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  user         User?            @relation(fields: [userId], references: [id])
+  payrollLines ErpPayrollLine[]
+
+  @@unique([tenantId, employeeNo])
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model ErpPayrollPeriod {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id])
+  runs   ErpPayrollRun[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model ErpPayrollRun {
+  id                        String              @id @default(uuid())
+  tenantId                  String
+  periodId                  String
+  status                    ErpPayrollRunStatus @default(draft)
+  payrollExpenseAccountCode String              @default("504.01")
+  payrollPayableAccountCode String              @default("205.02")
+  pph21PayableAccountCode   String              @default("204.03")
+  bpjsPayableAccountCode    String              @default("205.03")
+  grossTotal                Decimal             @default(0) @db.Decimal(18, 2)
+  deductionsTotal           Decimal             @default(0) @db.Decimal(18, 2)
+  netTotal                  Decimal             @default(0) @db.Decimal(18, 2)
+  postedAt                  DateTime?
+  paidAt                    DateTime?
+  createdById               String?
+  approvedById              String?
+  paidById                  String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id])
+  period      ErpPayrollPeriod       @relation(fields: [periodId], references: [id])
+  createdBy   User?                  @relation("PayrollCreatedBy", fields: [createdById], references: [id])
+  approvedBy  User?                  @relation("PayrollApprovedBy", fields: [approvedById], references: [id])
+  paidBy      User?                  @relation("PayrollPaidBy", fields: [paidById], references: [id])
+  lines       ErpPayrollLine[]
+  settlements ErpPayrollSettlement[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, periodId])
+}
+
+model ErpPayrollLine {
+  id           String  @id @default(uuid())
+  payrollRunId String
+  employeeId   String
+  gross        Decimal @default(0) @db.Decimal(18, 2)
+  allowance    Decimal @default(0) @db.Decimal(18, 2)
+  pph21        Decimal @default(0) @db.Decimal(18, 2)
+  bpjsEmployee Decimal @default(0) @db.Decimal(18, 2)
+  bpjsEmployer Decimal @default(0) @db.Decimal(18, 2)
+  net          Decimal @default(0) @db.Decimal(18, 2)
+  notes        String?
+
+  payrollRun ErpPayrollRun @relation(fields: [payrollRunId], references: [id])
+  employee   ErpEmployee   @relation(fields: [employeeId], references: [id])
+
+  @@index([payrollRunId])
+  @@index([employeeId])
+}
+
+model ErpPayrollSettlement {
+  id              String                   @id @default(uuid())
+  tenantId        String
+  payrollRunId    String
+  kind            ErpPayrollSettlementKind
+  date            DateTime
+  amount          Decimal                  @db.Decimal(18, 2)
+  cashAccountCode String                   @default("101.02")
+  notes           String?
+  createdById     String?
+  createdAt       DateTime                 @default(now())
+
+  tenant     Tenant        @relation(fields: [tenantId], references: [id])
+  payrollRun ErpPayrollRun @relation(fields: [payrollRunId], references: [id])
+  createdBy  User?         @relation("PayrollSettlementCreatedBy", fields: [createdById], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, payrollRunId])
+  @@index([tenantId, kind])
+}
+
+model ErpCommissionPayout {
+  id                 String              @id @default(uuid())
+  tenantId           String
+  salesId            String?
+  userId             String
+  amount             Decimal             @db.Decimal(18, 2)
+  status             ErpCommissionStatus @default(draft)
+  payableAccountCode String              @default("205.05")
+  expenseAccountCode String              @default("503.04")
+  postedAt           DateTime?
+  paidAt             DateTime?
+  createdById        String?
+  approvedById       String?
+  paidById           String?
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  sales      ErpSales? @relation(fields: [salesId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
+  createdBy  User?     @relation("CommissionCreatedBy", fields: [createdById], references: [id])
+  approvedBy User?     @relation("CommissionApprovedBy", fields: [approvedById], references: [id])
+  paidBy     User?     @relation("CommissionPaidBy", fields: [paidById], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, userId])
+  @@index([tenantId, salesId])
 }
 
 model ErpSales {
-  id         String                 @id @default(uuid())
-  tenantId   String
-  projectId  String
-  unitId     String
-  customerId String
-  status     ErpSalesStatus         @default(draft)
-  totalPrice Decimal                @db.Decimal(18, 2)
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
-  documents  ErpGeneratedDocument[]
-  payments   ErpPayment[]
-  customer   ErpCustomer            @relation(fields: [customerId], references: [id])
-  project    ErpProject             @relation(fields: [projectId], references: [id])
-  unit       ErpUnit                @relation(fields: [unitId], references: [id])
+  id                   String                 @id @default(uuid())
+  tenantId             String
+  projectId            String
+  unitId               String
+  customerId           String
+  status               ErpSalesStatus         @default(draft)
+  totalPrice           Decimal                @db.Decimal(18, 2)
+  handoverAt           DateTime?
+  recognizedAt         DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  documents            ErpGeneratedDocument[]
+  payments             ErpPayment[]
+  journals             ErpJournal[]
+  customer             ErpCustomer            @relation(fields: [customerId], references: [id])
+  project              ErpProject             @relation(fields: [projectId], references: [id])
+  unit                 ErpUnit                @relation(fields: [unitId], references: [id])
+  erpCommissionPayouts ErpCommissionPayout[]
 
   @@index([tenantId])
 }
@@ -271,14 +600,20 @@ model ErpAccount {
 model ErpJournal {
   id          String             @id @default(uuid())
   tenantId    String
+  projectId   String?
+  salesId     String?
   date        DateTime
   description String
   reference   String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   details     ErpJournalDetail[]
+  project     ErpProject?        @relation(fields: [projectId], references: [id])
+  sales       ErpSales?          @relation(fields: [salesId], references: [id])
 
   @@index([tenantId])
+  @@index([tenantId, projectId])
+  @@index([tenantId, salesId])
 }
 
 model ErpJournalDetail {
@@ -330,28 +665,6 @@ model ErpStockMovement {
   @@index([materialId])
 }
 
-model ErpVendor {
-  id        String             @id @default(uuid())
-  name      String
-  email     String?
-  phone     String?
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  orders    ErpPurchaseOrder[]
-}
-
-model ErpPurchaseOrder {
-  id        String    @id @default(uuid())
-  vendorId  String
-  total     Decimal   @db.Decimal(18, 2)
-  status    String    @default("draft")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  vendor    ErpVendor @relation(fields: [vendorId], references: [id])
-
-  @@index([vendorId])
-}
-
 model ErpDocumentTemplate {
   id                 String                 @id @default(uuid())
   name               String
@@ -387,28 +700,41 @@ model Role {
 }
 
 model User {
-  id                  String               @id @default(uuid())
-  email               String               @unique
-  passwordHash        String
-  name                String?
-  phone               String?
-  status              UserStatus           @default(active)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  tenantId            String?
-  auditLogs           AuditLog[]           @relation("AuditActor")
-  compareLists        CompareList[]
-  developerIds        DeveloperUser[]
-  favorites           Favorite[]
-  inquiries           Inquiry[]
-  leads               Lead[]
-  licenses            License[]
-  mortgageSimulations MortgageSimulation[]
-  refresh             RefreshToken[]
-  tenant              Tenant?              @relation("TenantUsers", fields: [tenantId], references: [id])
-  roles               UserRole[]
-  verificationReviews VerificationRecord[] @relation("VerificationReviewer")
-  viewingRequests     ViewingRequest[]
+  id                     String                 @id @default(uuid())
+  email                  String                 @unique
+  passwordHash           String
+  name                   String?
+  phone                  String?
+  status                 UserStatus             @default(active)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  tenantId               String?
+  auditLogs              AuditLog[]             @relation("AuditActor")
+  compareLists           CompareList[]
+  developerIds           DeveloperUser[]
+  favorites              Favorite[]
+  inquiries              Inquiry[]
+  leads                  Lead[]
+  erpLeadActivities      ErpLeadActivity[]
+  erpPurchaseOrders      ErpPurchaseOrder[]
+  erpVendorBills         ErpVendorBill[]
+  erpVendorPayments      ErpVendorPayment[]
+  erpEmployees           ErpEmployee[]
+  erpPayrollRunsCreated  ErpPayrollRun[]        @relation("PayrollCreatedBy")
+  erpPayrollRunsApproved ErpPayrollRun[]        @relation("PayrollApprovedBy")
+  erpPayrollRunsPaid     ErpPayrollRun[]        @relation("PayrollPaidBy")
+  erpPayrollSettlements  ErpPayrollSettlement[] @relation("PayrollSettlementCreatedBy")
+  erpCommissionCreated   ErpCommissionPayout[]  @relation("CommissionCreatedBy")
+  erpCommissionApproved  ErpCommissionPayout[]  @relation("CommissionApprovedBy")
+  erpCommissionPaid      ErpCommissionPayout[]  @relation("CommissionPaidBy")
+  licenses               License[]
+  mortgageSimulations    MortgageSimulation[]
+  refresh                RefreshToken[]
+  tenant                 Tenant?                @relation("TenantUsers", fields: [tenantId], references: [id])
+  roles                  UserRole[]
+  verificationReviews    VerificationRecord[]   @relation("VerificationReviewer")
+  viewingRequests        ViewingRequest[]
+  erpCommissionPayouts   ErpCommissionPayout[]
 
   @@index([createdAt])
 }
@@ -1015,7 +1341,72 @@ enum ErpSalesStatus {
   draft
   pending
   approved
+  completed
   cancelled
+}
+
+enum ErpLeadStatus {
+  new
+  contacted
+  qualified
+  booked
+  lost
+}
+
+enum ErpLeadActivityType {
+  call
+  whatsapp
+  meeting
+  site_visit
+  note
+}
+
+enum ErpPurchaseOrderStatus {
+  draft
+  approved
+  closed
+  cancelled
+}
+
+enum ErpVendorBillStatus {
+  draft
+  approved
+  paid
+  cancelled
+}
+
+enum ErpVendorPaymentType {
+  payment
+  retention_release
+}
+
+enum ErpEmployeeStatus {
+  active
+  inactive
+}
+
+enum ErpPayrollRunStatus {
+  draft
+  approved
+  paid
+  cancelled
+}
+
+enum ErpPayrollSettlementKind {
+  pph21
+  bpjs
+}
+
+enum ErpCommissionStatus {
+  draft
+  approved
+  paid
+  cancelled
+}
+
+enum ErpRevenueRecognition {
+  point_in_time
+  over_time
 }
 
 enum ErpPaymentStatus {

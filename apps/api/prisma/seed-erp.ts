@@ -1,6 +1,8 @@
 import { PrismaClient, RoleName, UserStatus, SubscriptionStatus } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 
+import { DEFAULT_PROPERTY_COA } from "../src/modules/erp/coa";
+
 const prisma = new PrismaClient();
 
 async function main() {
@@ -163,20 +165,10 @@ async function main() {
     },
   });
 
-  // 7. Accounting Accounts (Basic Chart)
-  const accounts = [
-    { tenantId: tenant.id, code: "101", name: "Kas & Bank", type: "Asset" },
-    { tenantId: tenant.id, code: "401", name: "Pendapatan Penjualan", type: "Revenue" },
-    { tenantId: tenant.id, code: "102", name: "Piutang Konsumen", type: "Asset" },
-  ];
-
-  for (const acc of accounts) {
-    await prisma.erpAccount.upsert({
-      where: { tenantId_code: { tenantId: acc.tenantId, code: acc.code } },
-      update: {},
-      create: acc,
-    });
-  }
+  await prisma.erpAccount.createMany({
+    data: DEFAULT_PROPERTY_COA.map((a) => ({ ...a, tenantId: tenant.id })),
+    skipDuplicates: true,
+  });
 
   // 8. Document Template
   await prisma.erpDocumentTemplate.create({

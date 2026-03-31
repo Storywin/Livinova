@@ -8,6 +8,7 @@ import { AppModule } from "./modules/app/app.module";
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
 
   app.use(helmet());
   app.enableCors({
@@ -34,8 +35,22 @@ async function bootstrap() {
   SwaggerModule.setup("docs", app, document);
 
   const port = process.env.PORT ? Number(process.env.PORT) : 4000;
-  await app.listen(port);
-  logger.log(`Aplikasi API berjalan di port ${port}`);
+  try {
+    await app.listen(port);
+    logger.log(`Aplikasi API berjalan di port ${port}`);
+  } catch (err: unknown) {
+    const e = err as { code?: unknown; message?: unknown };
+    if (e?.code === "EADDRINUSE") {
+      logger.error(
+        `Port ${port} sedang digunakan. Kemungkinan ada instance API lain yang masih berjalan. Hentikan proses yang memakai port tersebut atau ubah env PORT.`,
+      );
+      try {
+        await app.close();
+      } catch {}
+      process.exit(0);
+    }
+    throw err;
+  }
 }
 
 void bootstrap();

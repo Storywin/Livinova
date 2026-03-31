@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { parseJwt } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 

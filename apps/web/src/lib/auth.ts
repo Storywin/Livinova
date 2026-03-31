@@ -27,6 +27,11 @@ export function getAccessToken() {
   return localStorage.getItem("livinova_access_token");
 }
 
+export function getRefreshToken() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("livinova_refresh_token");
+}
+
 export function isAdminToken(token: string) {
   const payload = parseJwt(token);
   const roles = payload?.roles ?? [];

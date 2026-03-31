@@ -1,6 +1,8 @@
 import { Prisma, PrismaClient, RoleName } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 
+import { DEFAULT_PROPERTY_COA } from "../src/modules/erp/coa";
+
 const prisma = new PrismaClient();
 
 const SALT_ROUNDS = 12;
@@ -219,26 +221,10 @@ async function main() {
   }
 
   // 8. Seed COA for Demo Tenant
-  const existingAccounts = await prisma.erpAccount.count({ where: { tenantId: tenant.id } });
-  if (existingAccounts === 0) {
-    const standardCOA = [
-      { code: "101.01", name: "Kas Utama (Cash on Hand)", type: "asset" },
-      { code: "101.02", name: "Bank Mandiri Operasional", type: "asset" },
-      { code: "101.03", name: "Bank BCA Escrow", type: "asset" },
-      { code: "102.01", name: "Piutang Usaha Konsumen", type: "asset" },
-      { code: "103.01", name: "Persediaan Lahan Mentah", type: "asset" },
-      { code: "103.03", name: "Pekerjaan Dalam Pelaksanaan (WIP)", type: "asset" },
-      { code: "201.01", name: "Hutang Usaha - Subkontraktor", type: "liability" },
-      { code: "202.01", name: "Uang Muka Konsumen - Booking Fee", type: "liability" },
-      { code: "301.01", name: "Modal Saham Disetor", type: "equity" },
-      { code: "401.01", name: "Pendapatan Penjualan Unit Properti", type: "income" },
-      { code: "501.01", name: "Beban Pokok Penjualan (HPP)", type: "expense" },
-      { code: "503.01", name: "Beban Gaji & Tunjangan", type: "expense" },
-    ];
-    await prisma.erpAccount.createMany({
-      data: standardCOA.map((a) => ({ ...a, tenantId: tenant.id })),
-    });
-  }
+  await prisma.erpAccount.createMany({
+    data: DEFAULT_PROPERTY_COA.map((a) => ({ ...a, tenantId: tenant.id })),
+    skipDuplicates: true,
+  });
 
   // --- END ERP DEMO ACCOUNTS ---
   const pricingPlans = [

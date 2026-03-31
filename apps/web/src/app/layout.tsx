@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ReactNode } from "react";
 
-import { SiteFooter } from "@/components/site/site-footer";
-import { SiteHeader } from "@/components/site/site-header";
-
 import "./globals.css";
 import { Providers } from "./providers";
 import { SiteLayoutWrapper } from "@/components/site/site-layout-wrapper";

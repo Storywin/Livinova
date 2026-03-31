@@ -1,8 +1,5 @@
 import { Metadata } from "next";
 import { 
-  BarChart3, 
-  Building2, 
-  ClipboardCheck, 
   Coins, 
   FileText, 
   LayoutDashboard, 
@@ -17,13 +14,12 @@ import {
   Trophy,
   PieChart,
   HardHat,
-  GanttChartSquare,
   BadgeCheck,
   Globe2
 } from "lucide-react";
 import { Container } from "@/components/site/container";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 

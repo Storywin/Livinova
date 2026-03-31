@@ -2,7 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 
 import { Container } from "./container";
-import { apiFetch } from "@/lib/api";
 
 type SocialLink = { platform: string; url: string; label?: string };
 
@@ -84,15 +83,6 @@ function SocialIcon({ platform, className }: { platform: string; className?: str
       ●
     </span>
   );
-}
-
-async function getSiteSocialLinks(): Promise<SocialLink[]> {
-  try {
-    const data = await apiFetch<{ socialLinks: SocialLink[] }>("/public/site-settings");
-    return Array.isArray(data.socialLinks) ? data.socialLinks : [];
-  } catch {
-    return [];
-  }
 }
 
 const footerLinks = [

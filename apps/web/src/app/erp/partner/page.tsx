@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { RequireErp } from "@/components/erp/require-erp";
 import { 
@@ -103,7 +104,7 @@ export default function ErpPartnerDashboard() {
   const [tenantSearchQuery, setTenantSearchQuery] = useState("");
   const [partnerProfile, setPartnerProfile] = useState({ name: "", email: "", phone: "" });
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ["erp-partner-stats"],
     queryFn: () => apiFetch<PartnerStats>("/api/erp/partner/stats"),
   });
@@ -323,7 +324,14 @@ export default function ErpPartnerDashboard() {
                 </div>
                 <div className="flex items-center gap-5">
                   <div className="h-10 w-10 rounded-xl border-2 border-white shadow-lg bg-slate-200 flex items-center justify-center overflow-hidden hover:scale-105 transition-transform cursor-pointer">
-                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${stats?.partnerName || 'Partner'}`} alt="Avatar" className="h-full w-full object-cover" />
+                    <Image
+                      unoptimized
+                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${stats?.partnerName || "Partner"}`}
+                      alt="Avatar"
+                      width={80}
+                      height={80}
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                 </div>
               </div>
